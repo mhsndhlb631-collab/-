@@ -1,0 +1,11 @@
+node_modules/
+.next/
+coverage/
+tmp/
+output/
+.env*
+!.env.example
+.vercel/
+*.tsbuildinfo
+*.log
+/PRD_نظام_التشغيل_التربوي_V1.pdf

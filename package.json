@@ -1,0 +1,45 @@
+{
+  "name": "tarbiyah-operations",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "smoke": "node scripts/artifact-smoke.mjs",
+    "db:migrate": "node --env-file=.env.local scripts/migrate.ts",
+    "spike:session": "node --env-file=.env.spike.local scripts/session-spike.ts"
+  },
+  "dependencies": {
+    "@supabase/ssr": "0.12.6",
+    "@supabase/supabase-js": "2.116.0",
+    "drizzle-orm": "0.45.2",
+    "next": "16.3.4",
+    "postgres": "3.4.9",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@types/node": "26.5.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.4",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "vitest": "5.0.0"
+  }
+}

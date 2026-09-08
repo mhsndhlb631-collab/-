@@ -1,0 +1,23 @@
+name: P0 local foundation
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  local-foundation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run smoke
+  # Real Supabase and hosted acceptance are separate mandatory P0 gates.
+  # This workflow's success alone never authorizes P1.

@@ -1,0 +1,8 @@
+node_modules
+.next
+tmp
+coverage
+package-lock.json
+next-env.d.ts
+*.pdf
+.env*
