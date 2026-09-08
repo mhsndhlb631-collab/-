@@ -19,6 +19,8 @@
     "test:integration": "vitest run tests/integration",
     "smoke": "node scripts/artifact-smoke.mjs",
     "db:migrate": "node --env-file=.env.local scripts/migrate.ts",
+    "db:setup-runtime": "node --env-file=.env.local scripts/setup-runtime-role.ts",
+    "db:verify-runtime": "node --env-file=.env.local scripts/verify-runtime-role.ts",
     "spike:session": "node --env-file=.env.spike.local scripts/session-spike.ts"
   },
   "dependencies": {
