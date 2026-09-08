@@ -14,6 +14,7 @@ const parsed = z
     MIGRATION_DATABASE_URL: z.string().startsWith("postgres"),
     RUNTIME_DATABASE_PASSWORD: z.string().min(24),
     AUTH_INTERNAL_EMAIL_DOMAIN: z.string().min(4),
+    HOSTED_ORIGIN: z.url().optional(),
   })
   .safeParse(process.env);
 
@@ -22,6 +23,8 @@ if (!parsed.success) {
   process.exit(1);
 }
 const env = parsed.data;
+const hostedOrigin =
+  env.HOSTED_ORIGIN ?? "https://tarbiyah-operations.vercel.app";
 const admin = createClient(env.SUPABASE_URL, env.SUPABASE_SECRET_KEY, {
   auth: {
     persistSession: false,
@@ -56,6 +59,8 @@ const fixture = {
   outsiderPersonId: randomUUID(),
   responsiblePersonId: randomUUID(),
   responsibleAccountId: randomUUID(),
+  mentorPersonId: randomUUID(),
+  mentorAccountId: randomUUID(),
   studentPersonId: randomUUID(),
   studentProfileId: randomUUID(),
   studentAccountId: randomUUID(),
@@ -71,7 +76,7 @@ function requireProof(value: unknown): asserts value {
 
 async function createLinkedIdentity(
   accountId: string,
-  role: "RESPONSIBLE" | "STUDENT",
+  role: "RESPONSIBLE" | "MENTOR" | "STUDENT",
 ) {
   const email = `${accountId}@${env.AUTH_INTERNAL_EMAIL_DOMAIN}`;
   const created = await admin.auth.admin.createUser({
@@ -85,7 +90,9 @@ async function createLinkedIdentity(
   const personId =
     role === "RESPONSIBLE"
       ? fixture.responsiblePersonId
-      : fixture.studentPersonId;
+      : role === "MENTOR"
+        ? fixture.mentorPersonId
+        : fixture.studentPersonId;
   await migrator`update app.login_accounts set supabase_auth_user_id=${created.data.user.id}::uuid,
     updated_at=clock_timestamp(),row_version=row_version+1
     where id=${accountId}::uuid and person_id=${personId}::uuid and status='PROVISIONING'`;
@@ -129,6 +136,7 @@ try {
       values(${fixture.outsiderWorkspaceId}::uuid,'P0 isolated workspace','Africa/Cairo',6)`;
     await tx`insert into app.persons(id,workspace_id,display_name) values
       (${fixture.responsiblePersonId}::uuid,${fixture.workspaceId}::uuid,'P0 Responsible'),
+      (${fixture.mentorPersonId}::uuid,${fixture.workspaceId}::uuid,'P0 Mentor'),
       (${fixture.studentPersonId}::uuid,${fixture.workspaceId}::uuid,'P0 Student')`;
     await tx`insert into app.persons(id,workspace_id,display_name)
       values(${fixture.outsiderPersonId}::uuid,${fixture.outsiderWorkspaceId}::uuid,'P0 Isolated')`;
@@ -137,8 +145,12 @@ try {
     await tx`insert into app.login_accounts(id,workspace_id,person_id,normalized_login_name,role)
       values(${fixture.responsibleAccountId}::uuid,${fixture.workspaceId}::uuid,${fixture.responsiblePersonId}::uuid,
         ${`p0_admin_${fixture.responsibleAccountId.slice(0, 8)}`} ,'RESPONSIBLE'),
+        (${fixture.mentorAccountId}::uuid,${fixture.workspaceId}::uuid,${fixture.mentorPersonId}::uuid,
+        ${`p0_mentor_${fixture.mentorAccountId.slice(0, 8)}`} ,'MENTOR'),
         (${fixture.studentAccountId}::uuid,${fixture.workspaceId}::uuid,${fixture.studentPersonId}::uuid,
         ${`p0_student_${fixture.studentAccountId.slice(0, 8)}`} ,'STUDENT')`;
+    await tx`insert into app.mentor_student_scopes(workspace_id,mentor_person_id,student_person_id,effective_from)
+      values(${fixture.workspaceId}::uuid,${fixture.mentorPersonId}::uuid,${fixture.studentPersonId}::uuid,clock_timestamp()-interval '1 minute')`;
   });
   const responsibleEmail = await createLinkedIdentity(
     fixture.responsibleAccountId,
@@ -148,8 +160,41 @@ try {
     fixture.studentAccountId,
     "STUDENT",
   );
-  requireProof(responsibleEmail !== studentEmail);
+  const mentorEmail = await createLinkedIdentity(
+    fixture.mentorAccountId,
+    "MENTOR",
+  );
+  requireProof(
+    responsibleEmail !== studentEmail && mentorEmail !== studentEmail,
+  );
   evidence.disabled_create_link_activate_sequence = true;
+
+  stage = "hosted_login";
+  const hostedResponse = await fetch(`${hostedOrigin}/api/v1/auth/login`, {
+    method: "POST",
+    headers: { Origin: hostedOrigin, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      login_name: `p0_student_${fixture.studentAccountId.slice(0, 8)}`,
+      password,
+    }),
+  });
+  const hostedText = await hostedResponse.text();
+  const hostedCookies = hostedResponse.headers.getSetCookie();
+  requireProof(
+    hostedResponse.status === 200 &&
+      hostedCookies.length === 2 &&
+      hostedCookies.every(
+        (cookie) =>
+          cookie.startsWith("__Host-tarbiyah-") &&
+          cookie.includes("HttpOnly") &&
+          cookie.includes("Secure"),
+      ) &&
+      !hostedText.includes(password) &&
+      !hostedText.includes(studentEmail) &&
+      !hostedText.includes("access_token") &&
+      !hostedText.includes("refresh_token"),
+  );
+  evidence.hosted_login_private_http_only_cookies = true;
 
   const accessorSql = await readFile("db/spikes/session-probe.sql", "utf8");
   await migrator.begin(async (tx) => {
@@ -253,7 +298,18 @@ try {
       typeof responsibleClaims.data?.claims.session_id === "string",
   );
   const responsibleSessionId = String(responsibleClaims.data.claims.session_id);
-  const [responsiblePeople, studentPeople] = await Promise.all([
+  const mentor = publicClient();
+  const mentorLogin = await mentor.auth.signInWithPassword({
+    email: mentorEmail,
+    password,
+  });
+  requireProof(!mentorLogin.error && mentorLogin.data.session);
+  const mentorClaims = await mentor.auth.getClaims(
+    mentorLogin.data.session.access_token,
+  );
+  const mentorSessionId = mentorClaims.data?.claims.session_id;
+  requireProof(!mentorClaims.error && typeof mentorSessionId === "string");
+  const [responsiblePeople, studentPeople, mentorPeople] = await Promise.all([
     runtime.begin(async (tx) => {
       await tx.unsafe("set local role tarbiyah_runtime");
       await tx`select set_config('app.account_id',${fixture.responsibleAccountId},true),set_config('app.session_id',${responsibleSessionId},true)`;
@@ -264,20 +320,128 @@ try {
       await tx`select set_config('app.account_id',${fixture.studentAccountId},true),set_config('app.session_id',${freshProbe.sessionId},true)`;
       return tx`select id from app.persons order by id`;
     }),
+    runtime.begin(async (tx) => {
+      await tx.unsafe("set local role tarbiyah_runtime");
+      await tx`select set_config('app.account_id',${fixture.mentorAccountId},true),set_config('app.session_id',${mentorSessionId},true)`;
+      return tx`select id from app.persons order by id`;
+    }),
   ]);
   requireProof(
-    responsiblePeople.length === 2 &&
+    responsiblePeople.length === 3 &&
       responsiblePeople.every((row) => row.id !== fixture.outsiderPersonId) &&
       studentPeople.length === 1 &&
-      studentPeople[0].id === fixture.studentPersonId,
+      studentPeople[0].id === fixture.studentPersonId &&
+      mentorPeople.length === 2 &&
+      mentorPeople.some((row) => row.id === fixture.mentorPersonId) &&
+      mentorPeople.some((row) => row.id === fixture.studentPersonId) &&
+      mentorPeople.every((row) => row.id !== fixture.responsiblePersonId),
   );
   evidence.rls_responsible_workspace_scope = true;
   evidence.rls_student_self_scope = true;
+  evidence.rls_mentor_assigned_scope = true;
   evidence.rls_cross_workspace_isolation = true;
+
+  stage = "disable_enable";
+  await migrator.begin(async (tx) => {
+    await tx`update app.login_accounts set status='DISABLED',disabled_at=clock_timestamp(),
+      revoked_before=clock_timestamp(),updated_at=clock_timestamp(),row_version=row_version+1
+      where id=${fixture.studentAccountId}::uuid`;
+    await tx`insert into app.audit_events(workspace_id,actor_account_id,actor_role,subject_person_id,
+      action,resource_type,resource_id,request_id) values(${fixture.workspaceId}::uuid,
+      ${fixture.responsibleAccountId}::uuid,'RESPONSIBLE',${fixture.studentPersonId}::uuid,
+      'ACCOUNT_DISABLED','login_account',${fixture.studentAccountId}::uuid,${randomUUID()}::uuid)`;
+  });
+  requireProof(
+    !(await accepted(fresh.data.session.access_token, fixture.studentAccountId))
+      .accepted,
+  );
+  await migrator.begin(async (tx) => {
+    await tx`update app.login_accounts set status='ACTIVE',disabled_at=null,
+      updated_at=clock_timestamp(),row_version=row_version+1 where id=${fixture.studentAccountId}::uuid`;
+    await tx`insert into app.audit_events(workspace_id,actor_account_id,actor_role,subject_person_id,
+      action,resource_type,resource_id,request_id) values(${fixture.workspaceId}::uuid,
+      ${fixture.responsibleAccountId}::uuid,'RESPONSIBLE',${fixture.studentPersonId}::uuid,
+      'ACCOUNT_ENABLED','login_account',${fixture.studentAccountId}::uuid,${randomUUID()}::uuid)`;
+  });
+  requireProof(
+    !(await accepted(fresh.data.session.access_token, fixture.studentAccountId))
+      .accepted,
+  );
+  const afterEnable = publicClient();
+  const enabledLogin = await afterEnable.auth.signInWithPassword({
+    email: studentEmail,
+    password,
+  });
+  requireProof(!enabledLogin.error && enabledLogin.data.session);
+  requireProof(
+    (
+      await accepted(
+        enabledLogin.data.session.access_token,
+        fixture.studentAccountId,
+      )
+    ).accepted,
+  );
+  evidence.disable_blocks_and_enable_requires_new_login = true;
+
+  stage = "administrative_reset";
+  const resetPassword = randomBytes(24).toString("base64url");
+  await migrator`update app.login_accounts set status='CREDENTIAL_UPDATE',
+    revoked_before=clock_timestamp(),updated_at=clock_timestamp(),row_version=row_version+1
+    where id=${fixture.studentAccountId}::uuid`;
+  const listedUsers = await admin.auth.admin.listUsers();
+  const studentAuthId = listedUsers.data.users.find(
+    (user) => user.email === studentEmail,
+  )?.id;
+  requireProof(!listedUsers.error && studentAuthId);
+  const providerReset = await admin.auth.admin.updateUserById(studentAuthId, {
+    password: resetPassword,
+  });
+  requireProof(!providerReset.error);
+  await migrator.begin(async (tx) => {
+    await tx`update app.login_accounts set status='ACTIVE',must_change_password=true,
+      temporary_password_expires_at=clock_timestamp()+interval '24 hours',updated_at=clock_timestamp(),
+      row_version=row_version+1 where id=${fixture.studentAccountId}::uuid and status='CREDENTIAL_UPDATE'`;
+    await tx`insert into app.audit_events(workspace_id,actor_account_id,actor_role,subject_person_id,
+      action,resource_type,resource_id,request_id) values(${fixture.workspaceId}::uuid,
+      ${fixture.responsibleAccountId}::uuid,'RESPONSIBLE',${fixture.studentPersonId}::uuid,
+      'ACCOUNT_PASSWORD_RESET','login_account',${fixture.studentAccountId}::uuid,${randomUUID()}::uuid)`;
+  });
+  const oldPasswordLogin = await publicClient().auth.signInWithPassword({
+    email: studentEmail,
+    password,
+  });
+  requireProof(!!oldPasswordLogin.error);
+  const resetLogin = await publicClient().auth.signInWithPassword({
+    email: studentEmail,
+    password: resetPassword,
+  });
+  requireProof(!resetLogin.error && resetLogin.data.session);
+  const resetClaims = await publicClient().auth.getClaims(
+    resetLogin.data.session.access_token,
+  );
+  requireProof(
+    !resetClaims.error &&
+      typeof resetClaims.data?.claims.sub === "string" &&
+      typeof resetClaims.data.claims.session_id === "string",
+  );
+  const [resetAccepted] = await runtime.begin(async (tx) => {
+    await tx.unsafe("set local role tarbiyah_runtime");
+    return tx`select * from app.accept_login_session(${fixture.studentAccountId}::uuid,
+      ${String(resetClaims.data!.claims.session_id)}::uuid,${String(resetClaims.data!.claims.sub)}::uuid)`;
+  });
+  requireProof(resetAccepted?.must_change_password === true);
+  evidence.admin_reset_rejects_old_password_and_forces_change = true;
+  const [auditCount] =
+    await migrator`select count(*)::integer as count from app.audit_events
+    where workspace_id=${fixture.workspaceId}::uuid and action in ('ACCOUNT_DISABLED','ACCOUNT_ENABLED','ACCOUNT_PASSWORD_RESET')`;
+  requireProof(auditCount.count === 3);
+  evidence.sensitive_account_actions_audited = true;
   await Promise.allSettled([
     first.auth.signOut({ scope: "local" }),
     second.auth.signOut({ scope: "local" }),
     responsible.auth.signOut({ scope: "local" }),
+    mentor.auth.signOut({ scope: "local" }),
+    afterEnable.auth.signOut({ scope: "local" }),
   ]);
 
   await mkdir("output/p0", { recursive: true });
@@ -329,6 +493,7 @@ try {
         "alter table app.audit_events enable trigger audit_immutable",
       );
       await tx`delete from app.login_accounts where workspace_id=${fixture.workspaceId}::uuid`;
+      await tx`delete from app.mentor_student_scopes where workspace_id=${fixture.workspaceId}::uuid`;
       await tx`delete from app.student_profiles where workspace_id=${fixture.workspaceId}::uuid`;
       await tx`delete from app.persons where workspace_id=${fixture.workspaceId}::uuid`;
       await tx`delete from app.persons where workspace_id=${fixture.outsiderWorkspaceId}::uuid`;

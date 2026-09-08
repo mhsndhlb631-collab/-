@@ -11,8 +11,22 @@ const w1 = randomUUID(),
   a1 = randomUUID();
 beforeAll(async () => {
   db = new PGlite();
-  await db.exec("create role anon; create role authenticated;");
+  await db.exec(
+    "create role anon; create role authenticated; create schema auth; create table auth.sessions(id uuid primary key,user_id uuid not null,created_at timestamptz not null default now());",
+  );
   await db.exec(await readFile("db/migrations/0001_foundation.sql", "utf8"));
+  await db.exec(
+    await readFile("db/migrations/0002_session_context_rls.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("db/migrations/0003_login_boundary.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("db/migrations/0004_mentor_scope_foundation.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("db/migrations/0005_harden_scope_visibility.sql", "utf8"),
+  );
   await db.query(
     "insert into app.workspaces(id,name,timezone,week_starts_on) values($1,'one','Africa/Cairo',6),($2,'two','Africa/Cairo',6)",
     [w1, w2],
