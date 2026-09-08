@@ -4,7 +4,7 @@ import { AppError, safeError } from "../domain/errors";
 /** No caller-provided body, URL, headers, user object, error message or stack is logged. */
 export function logRequest(event: {
   requestId: string;
-  operation: "health" | "ready" | "login";
+  operation: "health" | "ready" | "login" | "p1-command" | "p1-query";
   status: number;
 }) {
   console.info(
@@ -17,14 +17,14 @@ export function logRequest(event: {
   );
 }
 export async function endpoint(
-  operation: "health" | "ready" | "login",
-  action: () => Promise<unknown>,
+  operation: "health" | "ready" | "login" | "p1-command" | "p1-query",
+  action: (requestId: string) => Promise<unknown>,
 ) {
   const id = randomUUID(); // do not trust client request IDs as log contents
   let status = 200;
   let body: unknown;
   try {
-    body = { ...((await action()) as object), request_id: id };
+    body = { ...((await action(id)) as object), request_id: id };
   } catch (error) {
     const failure = safeError(error, id);
     status = failure.status;

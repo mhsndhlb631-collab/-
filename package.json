@@ -23,6 +23,7 @@
     "db:verify-runtime": "node --env-file=.env.local scripts/verify-runtime-role.ts",
     "spike:session": "node --env-file=.env.spike.local scripts/session-spike.ts",
     "acceptance:session": "node --env-file=.env.local scripts/run-session-acceptance.ts",
+    "acceptance:p1": "node --env-file=.env.local scripts/run-p1-acceptance.ts",
     "vercel:configure": "node scripts/configure-vercel.ts"
   },
   "dependencies": {

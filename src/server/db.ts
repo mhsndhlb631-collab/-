@@ -26,7 +26,7 @@ export async function readiness() {
       const [role] = await tx.unsafe<{ safe: boolean }[]>(runtimeRoleSafetySql);
       if (!role?.safe) throw new Error("Unsafe runtime role");
       const [version] =
-        await tx`select version from app.schema_migrations where version='0005_harden_scope_visibility'`;
+        await tx`select version from app.schema_migrations where version='0007_p1_write_policies'`;
       if (!version) throw new Error("Missing migration");
     });
     return { status: "ready" };

@@ -27,6 +27,12 @@ beforeAll(async () => {
   await db.exec(
     await readFile("db/migrations/0005_harden_scope_visibility.sql", "utf8"),
   );
+  await db.exec(
+    await readFile("db/migrations/0006_program_distribution.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("db/migrations/0007_p1_write_policies.sql", "utf8"),
+  );
   await db.query(
     "insert into app.workspaces(id,name,timezone,week_starts_on) values($1,'one','Africa/Cairo',6),($2,'two','Africa/Cairo',6)",
     [w1, w2],
@@ -39,7 +45,7 @@ beforeAll(async () => {
     "insert into app.login_accounts(id,workspace_id,person_id,normalized_login_name,role) values($1,$2,$3,'طالب123','STUDENT')",
     [a1, w1, p1],
   );
-});
+}, 30_000);
 afterAll(async () => {
   await db?.close();
 });
@@ -222,5 +228,71 @@ describe("local PostgreSQL foundation (not hosted Supabase acceptance)", () => {
     await expect(
       db.query("delete from app.audit_events where id=$1", [id]),
     ).rejects.toMatchObject({ code: "42501" });
+  });
+
+  it("preserves a published plan and its weeks", async () => {
+    const template = randomUUID();
+    const plan = randomUUID();
+    await db.query(
+      "insert into app.program_templates(id,workspace_id,name,level) values($1,$2,'Program A','Level 1')",
+      [template, w1],
+    );
+    await db.query(
+      "insert into app.program_plans(id,workspace_id,template_id,version,name) values($1,$2,$3,1,'Program A v1')",
+      [plan, w1, template],
+    );
+    await db.query(
+      "insert into app.plan_weeks(workspace_id,plan_id,week_number,week_type,title) values($1,$2,1,'STANDARD','Week 1')",
+      [w1, plan],
+    );
+    await db.query(
+      "update app.program_plans set status='PUBLISHED' where id=$1",
+      [plan],
+    );
+    await expect(
+      db.query("update app.program_plans set name='mutated' where id=$1", [
+        plan,
+      ]),
+    ).rejects.toMatchObject({ code: "23514" });
+    await expect(
+      db.query("update app.plan_weeks set title='mutated' where plan_id=$1", [
+        plan,
+      ]),
+    ).rejects.toMatchObject({ code: "23514" });
+  });
+
+  it("rejects group membership outside the enrollment cohort", async () => {
+    const template = randomUUID();
+    const c1 = randomUUID();
+    const c2 = randomUUID();
+    const group = randomUUID();
+    const student = randomUUID();
+    const enrollment = randomUUID();
+    await db.query(
+      "insert into app.program_templates(id,workspace_id,name,level) values($1,$2,'Program B','Level 2')",
+      [template, w1],
+    );
+    await db.query(
+      "insert into app.cohorts(id,workspace_id,name,source_template_id,starts_on,ends_on) values($1,$2,'C1',$3,'2026-01-01','2026-12-31'),($4,$2,'C2',$3,'2026-01-01','2026-12-31')",
+      [c1, w1, template, c2],
+    );
+    await db.query(
+      "insert into app.groups(id,workspace_id,cohort_id,name) values($1,$2,$3,'G2')",
+      [group, w1, c2],
+    );
+    await db.query(
+      "insert into app.student_profiles(id,workspace_id,person_id) values($1,$2,$3)",
+      [student, w1, p1],
+    );
+    await db.query(
+      "insert into app.enrollments(id,workspace_id,student_profile_id,cohort_id,effective_from) values($1,$2,$3,$4,now())",
+      [enrollment, w1, student, c1],
+    );
+    await expect(
+      db.query(
+        "insert into app.group_memberships(workspace_id,enrollment_id,group_id,effective_from) values($1,$2,$3,now())",
+        [w1, enrollment, group],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
   });
 });
