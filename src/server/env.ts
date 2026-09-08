@@ -6,6 +6,12 @@ const base = z.object({
 const database = z.object({
   DATABASE_URL: z.string().regex(/^postgres(?:ql)?:\/\//),
 });
+const auth = base.extend({
+  SUPABASE_URL: z.url(),
+  SUPABASE_PUBLISHABLE_KEY: z.string().min(20),
+  AUTH_INTERNAL_EMAIL_DOMAIN: z.string().min(4),
+  AUTH_RATE_LIMIT_SECRET: z.string().min(32),
+});
 export function parseEnvironment(env: Record<string, string | undefined>) {
   const value = base.parse(env);
   const origin = new URL(value.APP_ORIGIN);
@@ -28,4 +34,7 @@ export function parseEnvironment(env: Record<string, string | undefined>) {
 }
 export function databaseUrl(env: Record<string, string | undefined>) {
   return database.parse(env).DATABASE_URL;
+}
+export function authEnvironment(env: Record<string, string | undefined>) {
+  return auth.parse(env);
 }

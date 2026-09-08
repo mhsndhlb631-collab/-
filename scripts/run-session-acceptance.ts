@@ -52,6 +52,8 @@ const runtime = postgres(
 
 const fixture = {
   workspaceId: randomUUID(),
+  outsiderWorkspaceId: randomUUID(),
+  outsiderPersonId: randomUUID(),
   responsiblePersonId: randomUUID(),
   responsibleAccountId: randomUUID(),
   studentPersonId: randomUUID(),
@@ -123,9 +125,13 @@ try {
   await migrator.begin(async (tx) => {
     await tx`insert into app.workspaces(id,name,timezone,week_starts_on)
       values(${fixture.workspaceId}::uuid,'P0 temporary acceptance','Africa/Cairo',6)`;
+    await tx`insert into app.workspaces(id,name,timezone,week_starts_on)
+      values(${fixture.outsiderWorkspaceId}::uuid,'P0 isolated workspace','Africa/Cairo',6)`;
     await tx`insert into app.persons(id,workspace_id,display_name) values
       (${fixture.responsiblePersonId}::uuid,${fixture.workspaceId}::uuid,'P0 Responsible'),
       (${fixture.studentPersonId}::uuid,${fixture.workspaceId}::uuid,'P0 Student')`;
+    await tx`insert into app.persons(id,workspace_id,display_name)
+      values(${fixture.outsiderPersonId}::uuid,${fixture.outsiderWorkspaceId}::uuid,'P0 Isolated')`;
     await tx`insert into app.student_profiles(id,workspace_id,person_id)
       values(${fixture.studentProfileId}::uuid,${fixture.workspaceId}::uuid,${fixture.studentPersonId}::uuid)`;
     await tx`insert into app.login_accounts(id,workspace_id,person_id,normalized_login_name,role)
@@ -231,9 +237,47 @@ try {
     freshProbe.accepted && freshProbe.sessionId !== firstProbe.sessionId,
   );
   evidence.new_login_after_revocation_accepted = true;
+
+  stage = "rls_scope";
+  const responsible = publicClient();
+  const responsibleLogin = await responsible.auth.signInWithPassword({
+    email: responsibleEmail,
+    password,
+  });
+  requireProof(!responsibleLogin.error && responsibleLogin.data.session);
+  const responsibleClaims = await responsible.auth.getClaims(
+    responsibleLogin.data.session.access_token,
+  );
+  requireProof(
+    !responsibleClaims.error &&
+      typeof responsibleClaims.data?.claims.session_id === "string",
+  );
+  const responsibleSessionId = String(responsibleClaims.data.claims.session_id);
+  const [responsiblePeople, studentPeople] = await Promise.all([
+    runtime.begin(async (tx) => {
+      await tx.unsafe("set local role tarbiyah_runtime");
+      await tx`select set_config('app.account_id',${fixture.responsibleAccountId},true),set_config('app.session_id',${responsibleSessionId},true)`;
+      return tx`select id from app.persons order by id`;
+    }),
+    runtime.begin(async (tx) => {
+      await tx.unsafe("set local role tarbiyah_runtime");
+      await tx`select set_config('app.account_id',${fixture.studentAccountId},true),set_config('app.session_id',${freshProbe.sessionId},true)`;
+      return tx`select id from app.persons order by id`;
+    }),
+  ]);
+  requireProof(
+    responsiblePeople.length === 2 &&
+      responsiblePeople.every((row) => row.id !== fixture.outsiderPersonId) &&
+      studentPeople.length === 1 &&
+      studentPeople[0].id === fixture.studentPersonId,
+  );
+  evidence.rls_responsible_workspace_scope = true;
+  evidence.rls_student_self_scope = true;
+  evidence.rls_cross_workspace_isolation = true;
   await Promise.allSettled([
     first.auth.signOut({ scope: "local" }),
     second.auth.signOut({ scope: "local" }),
+    responsible.auth.signOut({ scope: "local" }),
   ]);
 
   await mkdir("output/p0", { recursive: true });
@@ -248,11 +292,21 @@ try {
   console.log(
     "PASS: real Supabase login, refresh, revocation and new-login acceptance completed; sanitized evidence saved.",
   );
-} catch {
+} catch (error) {
+  const safeFailure =
+    typeof error === "object" && error && "code" in error
+      ? String(error.code)
+      : error instanceof Error
+        ? error.name
+        : "unknown";
   await mkdir("output/p0", { recursive: true });
   await writeFile(
     "output/p0/session-acceptance.json",
-    JSON.stringify({ result: "FAIL", stage, evidence }, null, 2),
+    JSON.stringify(
+      { result: "FAIL", stage, failure_code: safeFailure, evidence },
+      null,
+      2,
+    ),
   );
   console.error(
     `STOP AUTH SUBTASK: real acceptance failed at ${stage}; sanitized evidence saved, no secrets printed.`,
@@ -277,11 +331,17 @@ try {
       await tx`delete from app.login_accounts where workspace_id=${fixture.workspaceId}::uuid`;
       await tx`delete from app.student_profiles where workspace_id=${fixture.workspaceId}::uuid`;
       await tx`delete from app.persons where workspace_id=${fixture.workspaceId}::uuid`;
+      await tx`delete from app.persons where workspace_id=${fixture.outsiderWorkspaceId}::uuid`;
       await tx`delete from app.workspaces where id=${fixture.workspaceId}::uuid`;
+      await tx`delete from app.workspaces where id=${fixture.outsiderWorkspaceId}::uuid`;
     })
-    .catch(() => {
+    .catch((error) => {
+      const code =
+        typeof error === "object" && error && "code" in error
+          ? String(error.code)
+          : "unknown";
       console.error(
-        "ACTION REQUIRED: temporary fixture cleanup did not complete.",
+        `ACTION REQUIRED: temporary fixture cleanup did not complete (${code}).`,
       );
       process.exitCode = 1;
     });
