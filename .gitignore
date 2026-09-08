@@ -9,3 +9,6 @@ output/
 *.tsbuildinfo
 *.log
 /PRD_نظام_التشغيل_التربوي_V1.pdf
+
+.vercel
+.env*

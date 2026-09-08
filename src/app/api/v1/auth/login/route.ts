@@ -19,7 +19,13 @@ export async function POST(request: Request) {
     const contentType = request.headers.get("content-type")?.split(";")[0];
     if (contentType !== "application/json")
       throw new AppError("VALIDATION_ERROR");
-    const body = loginBody(await request.json());
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      throw new AppError("VALIDATION_ERROR");
+    }
+    const body = loginBody(rawBody);
     const hosted = env.APP_ENV === "staging" || env.APP_ENV === "production";
     const result = await loginService().execute({
       loginName: body.loginName,
