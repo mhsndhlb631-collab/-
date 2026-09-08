@@ -4,7 +4,7 @@ import { AppError, safeError } from "../domain/errors";
 /** No caller-provided body, URL, headers, user object, error message or stack is logged. */
 export function logRequest(event: {
   requestId: string;
-  operation: "health" | "ready";
+  operation: "health" | "ready" | "login";
   status: number;
 }) {
   console.info(
@@ -17,7 +17,7 @@ export function logRequest(event: {
   );
 }
 export async function endpoint(
-  operation: "health" | "ready",
+  operation: "health" | "ready" | "login",
   action: () => Promise<unknown>,
 ) {
   const id = randomUUID(); // do not trust client request IDs as log contents

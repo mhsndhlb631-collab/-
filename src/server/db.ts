@@ -21,11 +21,14 @@ export async function readiness() {
   try {
     parseEnvironment(process.env);
     const sql = runtimeSql();
-    const [role] = await sql.unsafe<{ safe: boolean }[]>(runtimeRoleSafetySql);
-    if (!role?.safe) throw new Error("Unsafe runtime role");
-    const [version] =
-      await sql`select version from app.schema_migrations where version='0001_foundation'`;
-    if (!version) throw new Error("Missing migration");
+    await sql.begin(async (tx) => {
+      await tx.unsafe("set local role tarbiyah_runtime");
+      const [role] = await tx.unsafe<{ safe: boolean }[]>(runtimeRoleSafetySql);
+      if (!role?.safe) throw new Error("Unsafe runtime role");
+      const [version] =
+        await tx`select version from app.schema_migrations where version='0003_login_boundary'`;
+      if (!version) throw new Error("Missing migration");
+    });
     return { status: "ready" };
   } catch {
     throw new AppError("DEPENDENCY_UNAVAILABLE");
