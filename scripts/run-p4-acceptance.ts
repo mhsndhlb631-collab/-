@@ -474,9 +474,7 @@ try {
     });
   } catch (cleanupError) {
     const code =
-      typeof cleanupError === "object" &&
-      cleanupError &&
-      "code" in cleanupError
+      typeof cleanupError === "object" && cleanupError && "code" in cleanupError
         ? String(cleanupError.code)
         : "unknown";
     console.error(
