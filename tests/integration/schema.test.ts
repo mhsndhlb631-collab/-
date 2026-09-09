@@ -91,7 +91,7 @@ beforeAll(async () => {
     await readFile("db/migrations/0024_add_finalized_value.sql", "utf8"),
   );
   await db.exec(
-    await readFile("db/migrations/0024b_finalize_transitions.sql", "utf8"),
+    await readFile("db/migrations/0025_finalize_transitions.sql", "utf8"),
   );
   await db.query(
     "insert into app.workspaces(id,name,timezone,week_starts_on) values($1,'one','Africa/Cairo',6),($2,'two','Africa/Cairo',6)",

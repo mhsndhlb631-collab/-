@@ -41,3 +41,17 @@ DROP TRIGGER IF EXISTS student_week_transition_guard
 CREATE TRIGGER student_week_transition_guard
   BEFORE INSERT OR UPDATE ON app.student_week_summaries
   FOR EACH ROW EXECUTE FUNCTION app.enforce_student_week_transition();
+
+-- P4.1 closing-boundary helper. A week is operationally closed when the
+-- workspace's local date is strictly after the week_end inclusive date.
+-- This is the only place that decides what "after the closing boundary"
+-- means; the application code calls it through a parameter and never
+-- composes timezone SQL itself.
+CREATE OR REPLACE FUNCTION app.week_closed_in_timezone(
+  week_end date,
+  tz text
+) RETURNS boolean
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path = pg_catalog AS $$
+  SELECT ((now() at time zone tz)::date > week_end)
+$$;
+GRANT EXECUTE ON FUNCTION app.week_closed_in_timezone(date, text) TO tarbiyah_runtime;

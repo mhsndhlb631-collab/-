@@ -419,8 +419,9 @@ export class P4LearningService {
         week_number: number;
         week_start: string;
         week_end: string;
+        workspace_timezone: string;
       }[]
-    >`select e.id enrollment_id,pw.id week_id,pw.week_number,(c.starts_on+(pw.week_number-1)*7)::text week_start,(c.starts_on+(pw.week_number-1)*7+6)::text week_end from app.enrollments e join app.cohorts c on c.id=e.cohort_id join app.plan_weeks pw on pw.plan_id=c.current_plan_id where e.student_profile_id=${studentId}::uuid and pw.id=${weekId}::uuid`;
+    >`select e.id enrollment_id,pw.id week_id,pw.week_number,(c.starts_on+(pw.week_number-1)*7)::text week_start,(c.starts_on+(pw.week_number-1)*7+6)::text week_end,w.timezone workspace_timezone from app.enrollments e join app.cohorts c on c.id=e.cohort_id join app.plan_weeks pw on pw.plan_id=c.current_plan_id join app.workspaces w on w.id=e.workspace_id where e.student_profile_id=${studentId}::uuid and pw.id=${weekId}::uuid`;
     if (!rows[0]) throw new AppError("NOT_FOUND");
     return rows[0];
   }
@@ -526,7 +527,12 @@ export class P4LearningService {
       payload: { student, week, ...body },
       work: async () => {
         const calculated = await this.calculate(student, week);
-        if (calculated.coverage < 1) throw new AppError("INCOMPLETE_WEEK");
+        const boundaryRows = await this.tx<
+          { week_closed: boolean }[]
+        >`select app.week_closed_in_timezone(${calculated.week_end}::date,${calculated.workspace_timezone}::text) as week_closed`;
+        const weekClosed = boundaryRows[0]?.week_closed === true;
+        if (calculated.coverage < 1 && !weekClosed)
+          throw new AppError("INCOMPLETE_WEEK");
         const current = await this.tx<
           {
             id: string;
