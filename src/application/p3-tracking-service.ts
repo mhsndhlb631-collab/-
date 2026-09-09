@@ -102,6 +102,7 @@ export class P3TrackingService {
       join app.tracking_definitions d on d.plan_id=c.current_plan_id
       join app.tracking_schedules s on s.tracking_definition_id=d.id
       where e.workspace_id=${this.actor.workspaceId}::uuid
+        and (${this.actor.role}<>'STUDENT' or sp.person_id=${this.actor.personId}::uuid)
         and (${input.enrollment_id ?? null}::uuid is null or e.id=${input.enrollment_id ?? null}::uuid)
         and e.effective_from::date<=${input.to}::date
         and (e.effective_to is null or e.effective_to::date>${input.from}::date)

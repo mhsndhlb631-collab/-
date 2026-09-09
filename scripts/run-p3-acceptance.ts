@@ -232,6 +232,8 @@ try {
     student,
     "/api/v1/tracking/expected?from=2026-09-06&to=2026-09-12",
   );
+  evidence.expected_http_200 = studentExpected.response.status === 200;
+  evidence.expected_count_8 = studentExpected.result.expected?.length === 8;
   prove(
     studentExpected.response.status === 200 &&
       studentExpected.result.expected.length === 8,
