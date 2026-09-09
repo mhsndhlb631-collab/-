@@ -1,5 +1,7 @@
 # P4 delivery report — learning and student week
 
+> **Historical closure:** P4.1 subsequently replaced mandatory weekly approval with automatic finalization and closed the product-lock deviation. See `p4.1-status.md`.
+
 **DECISION: P4 COMPLETE. P5 NOT STARTED.**
 
 | Gate                 | Final evidence                                                                                                                                                                                                                                                    |

@@ -1,5 +1,7 @@
 # P4 contract — learning and student week
 
+> **Historical contract:** P4.1 supersedes the weekly `OPEN -> READY -> APPROVED` lifecycle below with `OPEN -> FINALIZED`. See `p4.1-contract.md`; the remaining P4 decisions stay authoritative.
+
 **Status: frozen before P4 implementation.** P0 identity/security, P1 copied-plan ownership, P2 historical session scope, and P3 versioned tracking remain authoritative.
 
 ## Scope
