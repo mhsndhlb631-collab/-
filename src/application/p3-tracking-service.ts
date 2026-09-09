@@ -267,7 +267,7 @@ export class P3TrackingService {
           let resourceId: string;
           if (existing[0]) {
             if (
-              item.row_version !== existing[0].row_version ||
+              item.row_version !== Number(existing[0].row_version) ||
               item.reason === null
             )
               throw new AppError("VERSION_CONFLICT");
@@ -284,7 +284,7 @@ export class P3TrackingService {
             results.push({
               id: resourceId,
               version: updated[0].current_version,
-              row_version: updated[0].row_version,
+              row_version: Number(updated[0].row_version),
             });
           } else {
             if (item.row_version !== null)
@@ -302,7 +302,7 @@ export class P3TrackingService {
             results.push({
               id: resourceId,
               version: inserted[0].current_version,
-              row_version: inserted[0].row_version,
+              row_version: Number(inserted[0].row_version),
             });
           }
           await audit(
@@ -357,7 +357,7 @@ export class P3TrackingService {
         if (!current) throw new AppError("NOT_FOUND");
         if (
           current.current_version !== body.entry_version ||
-          current.row_version !== body.row_version
+          Number(current.row_version) !== body.row_version
         )
           throw new AppError("VERSION_CONFLICT");
         const reviewId = randomUUID();
@@ -383,7 +383,7 @@ export class P3TrackingService {
           entry_id: targetId,
           entry_version: body.entry_version,
           status: body.decision,
-          row_version: updated[0].row_version,
+          row_version: Number(updated[0].row_version),
         };
       },
     });

@@ -72,6 +72,12 @@ beforeAll(async () => {
   await db.exec(
     await readFile("db/migrations/0019_tracking_review_transition.sql", "utf8"),
   );
+  await db.exec(
+    await readFile(
+      "db/migrations/0020_tracking_review_update_guard.sql",
+      "utf8",
+    ),
+  );
   await db.query(
     "insert into app.workspaces(id,name,timezone,week_starts_on) values($1,'one','Africa/Cairo',6),($2,'two','Africa/Cairo',6)",
     [w1, w2],

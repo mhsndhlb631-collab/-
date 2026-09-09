@@ -348,6 +348,24 @@ try {
   evidence.initial_entry_version_1 = beforeReview.current_version === 1;
   evidence.initial_entry_row_version_1 = Number(beforeReview.row_version) === 1;
   evidence.initial_entry_pending = beforeReview.review_status === "PENDING";
+  const [reviewScope] = await db`
+    select
+      (select role='MENTOR' from app.login_accounts where id=${accounts[1]}::uuid) as mentor_role,
+      exists(
+        select 1 from app.tracking_entries te
+        join app.group_memberships gm on gm.enrollment_id=te.enrollment_id
+        join app.mentor_assignments ma on ma.group_id=gm.group_id
+        join app.login_accounts a on a.id=${accounts[1]}::uuid
+        where te.id=${entryId}::uuid and ma.mentor_person_id=a.person_id
+          and gm.effective_from<=(te.period_end+1)::timestamptz
+          and (gm.effective_to is null or gm.effective_to>(te.period_end+1)::timestamptz)
+          and ma.effective_from<=(te.period_end+1)::timestamptz
+          and (ma.effective_to is null or ma.effective_to>(te.period_end+1)::timestamptz)
+      ) as assigned_at_period`;
+  evidence.review_actor_is_mentor = reviewScope.mentor_role === true;
+  evidence.review_actor_assigned_at_period =
+    reviewScope.assigned_at_period === true;
+  stage = "review_correction";
   const reviewed = await request(
     mentor,
     `/api/v1/tracking/entries/${entryId}/reviews`,
