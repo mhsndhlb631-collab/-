@@ -232,7 +232,7 @@ export function LearningWorkspace({
               <h3>ملخص الأسبوع</h3>
               <p>
                 يعرض التغطية والدرجة من الأدلة المكتملة ويحفظ لقطة ثابتة عند
-                الاعتماد.
+                الإغلاق. الإغلاق حتمي عند اكتمال البيانات.
               </p>
               <button type="button" onClick={() => void loadWeek()}>
                 عرض الملخص
@@ -243,33 +243,41 @@ export function LearningWorkspace({
                   disabled={busy}
                   onClick={async () => {
                     await run(
-                      `/api/v1/students/${enrollment.student_id}/weeks/${weekId}/ready`,
+                      `/api/v1/students/${enrollment.student_id}/weeks/${weekId}/finalize`,
                       {},
                     );
                     await loadWeek();
                   }}
                 >
-                  تجهيز للاعتماد
+                  إغلاق الأسبوع تلقائيًا
                 </button>
               )}
-              {actorRole !== "STUDENT" && weekSummary?.status === "READY" && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={async () => {
-                    await run(
-                      `/api/v1/students/${enrollment.student_id}/weeks/${weekId}/approve`,
-                      {
-                        row_version: Number(weekSummary.row_version),
-                        reason: null,
-                      },
-                    );
-                    await loadWeek();
-                  }}
-                >
-                  اعتماد الأسبوع
-                </button>
-              )}
+              {actorRole !== "STUDENT" &&
+                weekSummary?.status === "FINALIZED" && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={async () => {
+                      const reason =
+                        typeof window !== "undefined"
+                          ? (window.prompt(
+                              "سبب التصحيح (3 محارف على الأقل):",
+                            ) ?? "")
+                          : "";
+                      if (reason.trim().length < 3) return;
+                      await run(
+                        `/api/v1/students/${enrollment.student_id}/weeks/${weekId}/amend`,
+                        {
+                          row_version: Number(weekSummary.row_version),
+                          reason: reason.trim(),
+                        },
+                      );
+                      await loadWeek();
+                    }}
+                  >
+                    تصحيح بعد الإغلاق
+                  </button>
+                )}
               {weekSummary && (
                 <span>
                   {weekSummary.status} ·{" "}

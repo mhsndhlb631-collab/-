@@ -1,5 +1,3 @@
-// P4.1 backward-compat shim: POST /corrections is identical to /amend.
-// Both call the same amendWeek service method.
 import { p4Command } from "../../../../../../../../server/p4-http";
 export async function POST(
   request: Request,

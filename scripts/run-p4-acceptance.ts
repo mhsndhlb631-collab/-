@@ -326,28 +326,17 @@ try {
   evidence.deterministic_full_coverage = true;
   response = await request(
     mentor,
-    `/api/v1/students/${profile}/weeks/${weekId}/ready`,
+    `/api/v1/students/${profile}/weeks/${weekId}/finalize`,
     "POST",
     {},
   );
   prove(
     response.response.status === 200 &&
-      response.result.status === "READY" &&
+      response.result.status === "FINALIZED" &&
+      response.result.revision === 1 &&
       response.result.row_version === 2,
   );
-  evidence.open_ready_transition = true;
-  response = await request(
-    mentor,
-    `/api/v1/students/${profile}/weeks/${weekId}/approve`,
-    "POST",
-    { row_version: 2, reason: null },
-  );
-  prove(response.response.status === 200 && response.result.revision === 1);
-  summaryId = response.result.id;
-  const firstScore = Number(response.result.score);
-  prove(firstScore === 80);
-  evidence.first_immutable_approval = true;
-  stage = "correction";
+  evidence.auto_finalize_without_approval_step = true;
   response = await request(
     mentor,
     `/api/v1/exams/${examId}/corrections`,
@@ -369,22 +358,32 @@ try {
     { row_version: 3 },
   );
   prove(response.response.status === 200 && response.result.row_version === 4);
+  summaryId = response.result.id;
+  const firstScore = Number(
+    (
+      await db`select (snapshot->>'score')::numeric score from app.student_week_approval_revisions where summary_id=${summaryId}::uuid order by approval_revision limit 1`
+    )[0].score,
+  );
+  prove(firstScore === 80);
+  evidence.first_immutable_finalization = true;
+  stage = "amend";
   const stale = await request(
     mentor,
-    `/api/v1/students/${profile}/weeks/${weekId}/corrections`,
+    `/api/v1/students/${profile}/weeks/${weekId}/amend`,
     "POST",
-    { row_version: 4, reason: "نسخة قديمة" },
+    { row_version: 99, reason: "نسخة قديمة" },
   );
   prove(stale.response.status === 409);
-  evidence.stale_week_revision_rejected = true;
+  evidence.stale_week_amendment_rejected = true;
   response = await request(
     mentor,
-    `/api/v1/students/${profile}/weeks/${weekId}/corrections`,
+    `/api/v1/students/${profile}/weeks/${weekId}/amend`,
     "POST",
-    { row_version: 3, reason: "اعتماد الدرجة المصححة" },
+    { row_version: 2, reason: "تصحيح الدرجة بعد مراجعة النتيجة" },
   );
   prove(
     response.response.status === 200 &&
+      response.result.status === "FINALIZED" &&
       response.result.revision === 2 &&
       Number(response.result.score) === 90,
   );
@@ -395,7 +394,7 @@ try {
       Number(revisions[0].score) === 80 &&
       Number(revisions[1].score) === 90,
   );
-  evidence.correction_creates_second_approval_snapshot = true;
+  evidence.amend_creates_second_immutable_snapshot = true;
   stage = "isolation";
   response = await request(
     outsider,
@@ -404,8 +403,8 @@ try {
   prove(response.response.status === 404);
   evidence.cross_workspace_denied = true;
   const audits =
-    await db`select count(*) count from app.audit_events where workspace_id=${workspace}::uuid and action in ('CONTENT_PUBLISHED','ASSIGNMENT_SUBMITTED','ASSIGNMENT_REVIEWED','EXAM_RESULT_RECORDED','EXAM_RESULT_PUBLISHED','STUDENT_SELF_REVIEWED','STUDENT_WEEK_READY','STUDENT_WEEK_APPROVED','STUDENT_WEEK_CORRECTED')`;
-  prove(Number(audits[0].count) >= 9);
+    await db`select count(*) count from app.audit_events where workspace_id=${workspace}::uuid and action in ('CONTENT_PUBLISHED','ASSIGNMENT_SUBMITTED','ASSIGNMENT_REVIEWED','EXAM_RESULT_RECORDED','EXAM_RESULT_PUBLISHED','STUDENT_SELF_REVIEWED','STUDENT_WEEK_FINALIZED','STUDENT_WEEK_AMENDED')`;
+  prove(Number(audits[0].count) >= 8);
   evidence.atomic_audit = true;
   await mkdir("output/p4", { recursive: true });
   await writeFile(
@@ -417,7 +416,7 @@ try {
     ),
   );
   console.log(
-    "PASS: hosted P4 learning, publication, weekly approval, correction, privacy and cleanup completed.",
+    "PASS: hosted P4.1 learning, auto-finalize, amend after finalize, immutable history, privacy and cleanup completed.",
   );
 } catch {
   await mkdir("output/p4", { recursive: true });

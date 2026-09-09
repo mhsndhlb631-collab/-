@@ -87,6 +87,12 @@ beforeAll(async () => {
   await db.exec(
     await readFile("db/migrations/0023_learning_history_integrity.sql", "utf8"),
   );
+  await db.exec(
+    await readFile("db/migrations/0024_add_finalized_value.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("db/migrations/0024b_finalize_transitions.sql", "utf8"),
+  );
   await db.query(
     "insert into app.workspaces(id,name,timezone,week_starts_on) values($1,'one','Africa/Cairo',6),($2,'two','Africa/Cairo',6)",
     [w1, w2],
@@ -577,7 +583,7 @@ describe("local PostgreSQL foundation (not hosted Supabase acceptance)", () => {
       ),
     ).rejects.toMatchObject({ code: "42501" });
     await db.query(
-      "insert into app.student_week_summaries(id,workspace_id,enrollment_id,plan_week_id,status,coverage,score,evidence,rule_snapshot,current_revision) values($1,$2,$3,$4,'APPROVED',1,80,'{}','{}',1)",
+      "insert into app.student_week_summaries(id,workspace_id,enrollment_id,plan_week_id,status,coverage,score,evidence,rule_snapshot,current_revision) values($1,$2,$3,$4,'FINALIZED',1,80,'{}','{}',1)",
       [summary, w1, enrollment, week],
     );
     await db.query(
