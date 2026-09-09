@@ -50,6 +50,7 @@ export function p3Command(
           ? String(error.code)
           : "";
       if (code === "23505") throw new AppError("VERSION_CONFLICT");
+      if (code === "40001") throw new AppError("VERSION_CONFLICT");
       if (code === "42501") throw new AppError("FORBIDDEN");
       if (["23503", "23514", "22P02"].includes(code))
         throw new AppError("VALIDATION_ERROR");

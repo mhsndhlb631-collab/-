@@ -116,11 +116,18 @@ try {
     for (let i = 0; i < accounts.length; i++)
       await tx`insert into app.login_accounts(id,workspace_id,person_id,normalized_login_name,role) values(${accounts[i]}::uuid,${i === 3 ? outsiderWorkspace : workspace}::uuid,${i === 3 ? people[4] : people[i]}::uuid,${names[i]},${roles[i]})`;
   });
-  for (let i = 0; i < accounts.length; i++) await identity(i);
-  const responsible = await login(0),
-    mentor = await login(1),
-    student = await login(2),
-    outsider = await login(3);
+  for (let i = 0; i < accounts.length; i++) {
+    stage = `identity_${i}`;
+    await identity(i);
+  }
+  stage = "login_responsible";
+  const responsible = await login(0);
+  stage = "login_mentor";
+  const mentor = await login(1);
+  stage = "login_student";
+  const student = await login(2);
+  stage = "login_outsider";
+  const outsider = await login(3);
   evidence.safe_identity_and_login = true;
 
   stage = "plan_copy";

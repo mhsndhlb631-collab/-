@@ -366,11 +366,10 @@ export class P3TrackingService {
             decision,reviewer_account_id,reason,request_id)
           values(${reviewId}::uuid,${this.actor.workspaceId}::uuid,${targetId}::uuid,
             ${body.entry_version},${body.decision},${this.actor.accountId}::uuid,${body.reason},${this.requestId}::uuid)`;
-        const updated = await this.tx<{ row_version: number }[]>`
-          update app.tracking_entries set review_status=${body.decision},row_version=row_version+1
-          where id=${targetId}::uuid and row_version=${body.row_version}
-          returning row_version`;
-        if (!updated[0]) throw new AppError("VERSION_CONFLICT");
+        const updated = await this.tx<{ row_version: number | null }[]>`
+          select app.apply_tracking_review_status(${targetId}::uuid,${body.entry_version},
+            ${body.row_version}::bigint,${body.decision}::app.tracking_review_status) as row_version`;
+        if (updated[0]?.row_version === null) throw new AppError("NOT_FOUND");
         await audit(
           this.tx,
           this.actor,
