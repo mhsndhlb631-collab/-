@@ -39,7 +39,13 @@ export function LearningWorkspace({
   command: (path: string, body: unknown, method?: string) => Promise<unknown>;
 }) {
   const [data, setData] = useState<Data | null>(null),
-    [message, setMessage] = useState("");
+    [message, setMessage] = useState(""),
+    [weekSummary, setWeekSummary] = useState<{
+      status: string;
+      row_version: number;
+      coverage: number;
+      score: number | null;
+    } | null>(null);
   async function load() {
     const response = await fetch("/api/v1/learning", { cache: "no-store" });
     if (response.ok) setData(await response.json());
@@ -52,11 +58,26 @@ export function LearningWorkspace({
       });
   }, []);
   async function run(path: string, body: unknown, method = "POST") {
-    await command(path, body, method);
+    const result = await command(path, body, method);
     await load();
     setMessage("تم تحديث مساحة التعلم.");
+    return result;
   }
   const enrollment = data?.enrollments[0];
+  const weekId = data?.assignments[0]?.week_id ?? data?.exams[0]?.week_id;
+  async function loadWeek() {
+    if (!enrollment || !weekId) return;
+    const response = await fetch(
+      `/api/v1/students/${enrollment.student_id}/weeks/${weekId}`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) return;
+    const result = await response.json();
+    setWeekSummary(result.summary);
+    setMessage(
+      `تغطية الأسبوع ${Math.round(result.coverage * 100)}%${result.score === null ? "" : ` · الدرجة ${Math.round(result.score)}%`}`,
+    );
+  }
   return (
     <section className="panel table-panel learning-panel">
       <div className="panel-heading">
@@ -204,6 +225,57 @@ export function LearningWorkspace({
                   )
                 }
               />
+            </article>
+          )}
+          {enrollment && weekId && (
+            <article>
+              <h3>ملخص الأسبوع</h3>
+              <p>
+                يعرض التغطية والدرجة من الأدلة المكتملة ويحفظ لقطة ثابتة عند
+                الاعتماد.
+              </p>
+              <button type="button" onClick={() => void loadWeek()}>
+                عرض الملخص
+              </button>
+              {actorRole !== "STUDENT" && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    await run(
+                      `/api/v1/students/${enrollment.student_id}/weeks/${weekId}/ready`,
+                      {},
+                    );
+                    await loadWeek();
+                  }}
+                >
+                  تجهيز للاعتماد
+                </button>
+              )}
+              {actorRole !== "STUDENT" && weekSummary?.status === "READY" && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    await run(
+                      `/api/v1/students/${enrollment.student_id}/weeks/${weekId}/approve`,
+                      {
+                        row_version: Number(weekSummary.row_version),
+                        reason: null,
+                      },
+                    );
+                    await loadWeek();
+                  }}
+                >
+                  اعتماد الأسبوع
+                </button>
+              )}
+              {weekSummary && (
+                <span>
+                  {weekSummary.status} ·{" "}
+                  {Math.round(weekSummary.coverage * 100)}%
+                </span>
+              )}
             </article>
           )}
         </div>
