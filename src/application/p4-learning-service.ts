@@ -541,11 +541,12 @@ export class P4LearningService {
             status: string;
           }[]
         >`select id,row_version,current_revision,status from app.student_week_summaries where enrollment_id=${calculated.enrollment_id}::uuid and plan_week_id=${week}::uuid for update`;
-        const summaryId = current[0]?.id ?? randomUUID();
+        const summaryId = current[0]?.id ?? randomUUID(),
+          revision = (current[0]?.current_revision ?? 0) + 1;
         if (!current[0]) {
           await this
-            .tx`insert into app.student_week_summaries(id,workspace_id,enrollment_id,plan_week_id,status,coverage,score,evidence,rule_snapshot)
-            values(${summaryId}::uuid,${this.actor.workspaceId}::uuid,${calculated.enrollment_id}::uuid,${week}::uuid,'FINALIZED',${calculated.coverage},${calculated.score},${this.tx.json(calculated.evidence)},${this.tx.json(calculated.rule_snapshot)})`;
+            .tx`insert into app.student_week_summaries(id,workspace_id,enrollment_id,plan_week_id,status,coverage,score,evidence,rule_snapshot,current_revision)
+            values(${summaryId}::uuid,${this.actor.workspaceId}::uuid,${calculated.enrollment_id}::uuid,${week}::uuid,'FINALIZED',${calculated.coverage},${calculated.score},${this.tx.json(calculated.evidence)},${this.tx.json(calculated.rule_snapshot)},${revision})`;
           await this
             .tx`update app.student_week_summaries set row_version=row_version+1,updated_at=clock_timestamp() where id=${summaryId}::uuid`;
         } else {
@@ -557,9 +558,8 @@ export class P4LearningService {
           await this
             .tx`update app.student_week_summaries set status='FINALIZED',coverage=${calculated.coverage},score=${calculated.score},
             evidence=${this.tx.json(calculated.evidence)},rule_snapshot=${this.tx.json(calculated.rule_snapshot)},
-            row_version=row_version+1,updated_at=clock_timestamp() where id=${summaryId}::uuid`;
+            current_revision=${revision},row_version=row_version+1,updated_at=clock_timestamp() where id=${summaryId}::uuid`;
         }
-        const revision = (current[0]?.current_revision ?? 0) + 1;
         const snapshot = {
           coverage: calculated.coverage,
           score: calculated.score,

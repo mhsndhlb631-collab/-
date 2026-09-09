@@ -52,9 +52,50 @@ const workspace = randomUUID(),
   authIds: string[] = [],
   password = randomBytes(24).toString("base64url"),
   evidence: Record<string, boolean> = {};
-let stage = "bootstrap";
+type SafeDiagnostic = {
+  substep: string;
+  expected: unknown;
+  actual: unknown;
+  http_status?: number;
+  application_error_code?: string;
+  row_versions?: Record<string, unknown>;
+  revision_count?: number;
+  score?: number | null;
+  audit_count?: number;
+  request_id?: string;
+};
+
+let stage = "bootstrap",
+  diagnostic: SafeDiagnostic | undefined;
 function prove(value: unknown): asserts value {
   if (!value) throw new Error("acceptance assertion failed");
+}
+function startSubstep(name: string) {
+  stage = name;
+  diagnostic = undefined;
+  console.log(`[P4 ACCEPTANCE] ${name}: START`);
+}
+function passSubstep() {
+  console.log(`[P4 ACCEPTANCE] ${stage}: PASS`);
+}
+function assertSubstep(
+  value: unknown,
+  details: Omit<SafeDiagnostic, "substep">,
+): asserts value {
+  if (value) return;
+  diagnostic = { substep: stage, ...details };
+  console.error(`[P4 ACCEPTANCE] ${stage}: FAIL`);
+  throw new Error(`acceptance assertion failed: ${stage}`);
+}
+function requestId(result: unknown) {
+  if (!result || typeof result !== "object") return undefined;
+  const value = (result as Record<string, unknown>).request_id;
+  return typeof value === "string" ? value : undefined;
+}
+function errorCode(result: unknown) {
+  if (!result || typeof result !== "object") return undefined;
+  const value = (result as Record<string, unknown>).code;
+  return typeof value === "string" ? value : undefined;
 }
 async function identity(i: number) {
   const created = await admin.auth.admin.createUser({
@@ -336,7 +377,9 @@ try {
       response.result.revision === 1 &&
       response.result.row_version === 2,
   );
+  summaryId = response.result.id;
   evidence.auto_finalize_without_approval_step = true;
+  startSubstep("exam_correction_and_publish");
   response = await request(
     mentor,
     `/api/v1/exams/${examId}/corrections`,
@@ -350,62 +393,172 @@ try {
       reason: "تصحيح رصد الدرجة",
     },
   );
-  prove(response.response.status === 200 && response.result.row_version === 3);
+  const examCorrStatus = response.response.status;
+  const examCorrRv = response.result.row_version;
+  assertSubstep(examCorrStatus === 200 && examCorrRv === 3, {
+    expected: { http_status: 200, row_version: 3 },
+    actual: { http_status: examCorrStatus, row_version: examCorrRv ?? null },
+    http_status: examCorrStatus,
+    application_error_code: errorCode(response.result),
+    row_versions: { correction: examCorrRv ?? null },
+    request_id: requestId(response.result),
+  });
   response = await request(
     mentor,
     `/api/v1/exams/results/${resultId}/publish`,
     "POST",
     { row_version: 3 },
   );
-  prove(response.response.status === 200 && response.result.row_version === 4);
-  summaryId = response.result.id;
-  const firstScore = Number(
-    (
-      await db`select (snapshot->>'score')::numeric score from app.student_week_approval_revisions where summary_id=${summaryId}::uuid order by approval_revision limit 1`
-    )[0].score,
-  );
-  prove(firstScore === 80);
+  const publishStatus = response.response.status;
+  const publishRv = response.result.row_version;
+  assertSubstep(publishStatus === 200 && publishRv === 4, {
+    expected: { http_status: 200, row_version: 4 },
+    actual: { http_status: publishStatus, row_version: publishRv ?? null },
+    http_status: publishStatus,
+    application_error_code: errorCode(response.result),
+    row_versions: {
+      correction: examCorrRv ?? null,
+      publication: publishRv ?? null,
+    },
+    request_id: requestId(response.result),
+  });
+  passSubstep();
+
+  startSubstep("immutable_finalization_score_80");
+  const firstSnapshots =
+    await db`select (snapshot->>'score')::numeric score from app.student_week_approval_revisions where summary_id=${summaryId}::uuid order by approval_revision limit 1`;
+  const firstScore = firstSnapshots[0] ? Number(firstSnapshots[0].score) : null;
+  assertSubstep(firstScore === 80, {
+    expected: { revision_count: 1, score: 80 },
+    actual: { revision_count: firstSnapshots.length, score: firstScore },
+    row_versions: { exam_publication: publishRv ?? null },
+    revision_count: firstSnapshots.length,
+    score: firstScore,
+    request_id: requestId(response.result),
+  });
   evidence.first_immutable_finalization = true;
-  stage = "amend";
+  passSubstep();
+
+  startSubstep("stale_amendment_rejected");
   const stale = await request(
     mentor,
     `/api/v1/students/${profile}/weeks/${weekId}/amend`,
     "POST",
     { row_version: 99, reason: "نسخة قديمة" },
   );
-  prove(stale.response.status === 409);
+  const staleStatus = stale.response.status;
+  assertSubstep(staleStatus === 409, {
+    expected: { http_status: 409, application_error_code: "VERSION_CONFLICT" },
+    actual: {
+      http_status: staleStatus,
+      application_error_code: errorCode(stale.result) ?? null,
+    },
+    http_status: staleStatus,
+    application_error_code: errorCode(stale.result),
+    row_versions: { supplied: 99, current_expected: 2 },
+    request_id: requestId(stale.result),
+  });
   evidence.stale_week_amendment_rejected = true;
+  passSubstep();
+
+  startSubstep("valid_amendment_revision_2_score_90");
   response = await request(
     mentor,
     `/api/v1/students/${profile}/weeks/${weekId}/amend`,
     "POST",
     { row_version: 2, reason: "تصحيح الدرجة بعد مراجعة النتيجة" },
   );
-  prove(
-    response.response.status === 200 &&
+  const amendStatus = response.response.status;
+  const amendRevision = response.result.revision;
+  const amendScore = response.result.score;
+  assertSubstep(
+    amendStatus === 200 &&
       response.result.status === "FINALIZED" &&
-      response.result.revision === 2 &&
-      Number(response.result.score) === 90,
+      amendRevision === 2 &&
+      Number(amendScore) === 90,
+    {
+      expected: {
+        http_status: 200,
+        status: "FINALIZED",
+        revision: 2,
+        score: 90,
+      },
+      actual: {
+        http_status: amendStatus,
+        status: response.result.status ?? null,
+        revision: amendRevision ?? null,
+        score: amendScore ?? null,
+      },
+      http_status: amendStatus,
+      application_error_code: errorCode(response.result),
+      row_versions: {
+        supplied: 2,
+        returned: response.result.row_version ?? null,
+      },
+      revision_count:
+        typeof amendRevision === "number" ? amendRevision : undefined,
+      score: typeof amendScore === "number" ? amendScore : null,
+      request_id: requestId(response.result),
+    },
   );
   const revisions =
     await db`select approval_revision,(snapshot->>'score')::numeric score from app.student_week_approval_revisions where summary_id=${summaryId}::uuid order by approval_revision`;
-  prove(
+  assertSubstep(
     revisions.length === 2 &&
       Number(revisions[0].score) === 80 &&
       Number(revisions[1].score) === 90,
+    {
+      expected: { revision_count: 2, scores: [80, 90] },
+      actual: {
+        revision_count: revisions.length,
+        scores: revisions.map((revision) => Number(revision.score)),
+      },
+      http_status: amendStatus,
+      row_versions: {
+        supplied: 2,
+        returned: response.result.row_version ?? null,
+      },
+      revision_count: revisions.length,
+      score:
+        revisions.length > 0
+          ? Number(revisions[revisions.length - 1].score)
+          : null,
+      request_id: requestId(response.result),
+    },
   );
   evidence.amend_creates_second_immutable_snapshot = true;
-  stage = "isolation";
+  passSubstep();
+
+  startSubstep("cross_workspace_denied");
   response = await request(
     outsider,
     `/api/v1/students/${profile}/weeks/${weekId}`,
   );
-  prove(response.response.status === 404);
+  const crossStatus = response.response.status;
+  assertSubstep(crossStatus === 404, {
+    expected: { http_status: 404 },
+    actual: {
+      http_status: crossStatus,
+      application_error_code: errorCode(response.result) ?? null,
+    },
+    http_status: crossStatus,
+    application_error_code: errorCode(response.result),
+    request_id: requestId(response.result),
+  });
   evidence.cross_workspace_denied = true;
+  passSubstep();
+
+  startSubstep("atomic_audit_count");
   const audits =
     await db`select count(*) count from app.audit_events where workspace_id=${workspace}::uuid and action in ('CONTENT_PUBLISHED','ASSIGNMENT_SUBMITTED','ASSIGNMENT_REVIEWED','EXAM_RESULT_RECORDED','EXAM_RESULT_PUBLISHED','STUDENT_SELF_REVIEWED','STUDENT_WEEK_FINALIZED','STUDENT_WEEK_AMENDED')`;
-  prove(Number(audits[0].count) >= 8);
+  const auditCount = Number(audits[0].count);
+  assertSubstep(auditCount >= 8, {
+    expected: { minimum_audit_count: 8 },
+    actual: { audit_count: auditCount },
+    audit_count: auditCount,
+  });
   evidence.atomic_audit = true;
+  passSubstep();
   await mkdir("output/p4", { recursive: true });
   await writeFile(
     "output/p4/acceptance.json",
@@ -418,17 +571,31 @@ try {
   console.log(
     "PASS: hosted P4.1 learning, auto-finalize, amend after finalize, immutable history, privacy and cleanup completed.",
   );
-} catch {
+} catch (err) {
   await mkdir("output/p4", { recursive: true });
+  const diag =
+    diagnostic ??
+    ({
+      substep: stage,
+      expected: "stage completes without an exception",
+      actual: err instanceof Error ? err.message : "unknown failure",
+    } satisfies SafeDiagnostic);
   await writeFile(
     "output/p4/acceptance.json",
     JSON.stringify(
-      { result: "FAIL", stage, failure_code: "assertion", evidence },
+      {
+        result: "FAIL",
+        stage,
+        failure_code: "assertion",
+        evidence,
+        diagnostic: diag,
+      },
       null,
       2,
     ),
   );
   console.error(`P4 acceptance failed at ${stage}; sanitized evidence saved.`);
+  console.error("[P4 ACCEPTANCE] sanitized diagnostic:", diag);
   process.exitCode = 1;
 } finally {
   try {
