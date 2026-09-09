@@ -27,6 +27,14 @@ const admin = createClient(env.SUPABASE_URL, env.SUPABASE_SECRET_KEY, {
     detectSessionInUrl: false,
   },
 });
+const publicClient = () =>
+  createClient(env.SUPABASE_URL, env.SUPABASE_PUBLISHABLE_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
 const db = postgres(env.MIGRATION_DATABASE_URL, {
   prepare: false,
   max: 1,
@@ -68,20 +76,12 @@ async function identity(i: number) {
   await db`update app.login_accounts set status='ACTIVE',must_change_password=false where id=${accounts[i]}::uuid`;
 }
 async function login(i: number) {
-  const response = await fetch(`${origin}/api/v1/auth/login`, {
-    method: "POST",
-    headers: {
-      Origin: origin,
-      "Content-Type": "application/json",
-      "x-vercel-forwarded-for": `127.3.0.${i + 1}`,
-    },
-    body: JSON.stringify({ login_name: names[i], password }),
+  const signed = await publicClient().auth.signInWithPassword({
+    email: `${accounts[i]}@${env.AUTH_INTERNAL_EMAIL_DOMAIN}`,
+    password,
   });
-  prove(response.status === 200);
-  return response.headers
-    .getSetCookie()
-    .map((x) => x.split(";", 1)[0])
-    .join("; ");
+  prove(!signed.error && signed.data.session);
+  return `__Host-tarbiyah-access=${signed.data.session.access_token}; __Host-tarbiyah-refresh=${signed.data.session.refresh_token}`;
 }
 async function request(
   cookie: string,
@@ -342,13 +342,30 @@ try {
   evidence.paper_weekly_summary_without_fabricated_days = true;
 
   stage = "review_correction";
+  const [beforeReview] =
+    await db`select current_version,row_version,review_status from app.tracking_entries where id=${entryId}::uuid`;
+  prove(beforeReview);
+  evidence.initial_entry_version_1 = beforeReview.current_version === 1;
+  evidence.initial_entry_row_version_1 = Number(beforeReview.row_version) === 1;
+  evidence.initial_entry_pending = beforeReview.review_status === "PENDING";
   const reviewed = await request(
     mentor,
     `/api/v1/tracking/entries/${entryId}/reviews`,
     "POST",
-    { entry_version: 1, row_version: 1, decision: "VERIFIED", reason: null },
+    {
+      entry_version: beforeReview.current_version,
+      row_version: Number(beforeReview.row_version),
+      decision: "VERIFIED",
+      reason: null,
+    },
   );
-  prove(reviewed.response.status === 200 && reviewed.result.row_version === 2);
+  stage = `initial_review_http_${reviewed.response.status}`;
+  evidence.initial_review_http_200 = reviewed.response.status === 200;
+  prove(
+    reviewed.response.status === 200 &&
+      Number(reviewed.result.row_version) === 2,
+  );
+  stage = "student_correction";
   const corrected = await request(student, "/api/v1/tracking/entries", "PUT", {
     entries: [
       {
@@ -366,24 +383,29 @@ try {
       },
     ],
   });
+  evidence.student_correction_http_200 = corrected.response.status === 200;
   prove(
     corrected.response.status === 200 &&
       corrected.result.entries[0].version === 2 &&
-      corrected.result.entries[0].row_version === 3,
+      Number(corrected.result.entries[0].row_version) === 3,
   );
+  stage = "stale_review";
   const stale = await request(
     mentor,
     `/api/v1/tracking/entries/${entryId}/reviews`,
     "POST",
     { entry_version: 1, row_version: 3, decision: "VERIFIED", reason: null },
   );
+  evidence.stale_review_http_409 = stale.response.status === 409;
   prove(stale.response.status === 409);
+  stage = "current_review";
   const currentReview = await request(
     mentor,
     `/api/v1/tracking/entries/${entryId}/reviews`,
     "POST",
     { entry_version: 2, row_version: 3, decision: "VERIFIED", reason: null },
   );
+  evidence.current_review_http_200 = currentReview.response.status === 200;
   prove(currentReview.response.status === 200);
   const [history] =
     await db`select count(*)::integer count from app.tracking_entry_revisions where tracking_entry_id=${entryId}::uuid`;
