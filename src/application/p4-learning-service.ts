@@ -196,7 +196,7 @@ export class P4LearningService {
       work: async () => {
         const rows = await this.tx<
           { row_version: unknown; current_version: number }[]
-        >`update app.assignment_submissions s set status='REVIEWED',score=${body.score},internal_notes=${body.internal_notes},student_feedback=${body.student_feedback},feedback_published_at=case when ${body.publish_feedback} then clock_timestamp() else null end,current_version=current_version+1,row_version=row_version+1,updated_at=clock_timestamp() from app.assignment_definitions d where s.id=${target}::uuid and d.id=s.assignment_definition_id and ${body.score}<=d.max_score and s.row_version=${body.row_version} returning s.row_version,s.current_version`;
+        >`update app.assignment_submissions s set status='REVIEWED',score=${body.score},internal_notes=${body.internal_notes},student_feedback=${body.student_feedback},feedback_published_at=case when ${body.publish_feedback} then clock_timestamp() else null end,current_version=s.current_version+1,row_version=s.row_version+1,updated_at=clock_timestamp() from app.assignment_definitions d where s.id=${target}::uuid and d.id=s.assignment_definition_id and ${body.score}<=d.max_score and s.row_version=${body.row_version} returning s.row_version,s.current_version`;
         if (!rows[0]) throw new AppError("VERSION_CONFLICT");
         await audit(
           this.tx,

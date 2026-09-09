@@ -472,9 +472,15 @@ try {
           `alter table ${trigger.split(" on ")[1]} enable trigger ${trigger.split(" on ")[0]}`,
         );
     });
-  } catch {
+  } catch (cleanupError) {
+    const code =
+      typeof cleanupError === "object" &&
+      cleanupError &&
+      "code" in cleanupError
+        ? String(cleanupError.code)
+        : "unknown";
     console.error(
-      "ACTION REQUIRED: P4 fixture cleanup could not be fully verified.",
+      `ACTION REQUIRED: P4 fixture cleanup failed safely (${code}).`,
     );
     process.exitCode = 1;
   }
