@@ -122,6 +122,8 @@ export class P4LearningService {
             !body.reason
           )
             throw new AppError("VERSION_CONFLICT");
+          await this
+            .tx`select set_config('app.correction_reason',${body.reason ?? ""},true)`;
           const updated = await this.tx<
             { row_version: unknown; current_version: number }[]
           >`update app.assignment_submissions set answer=${body.answer},submitted_by_account_id=${this.actor.accountId}::uuid,submitted_at=clock_timestamp(),status='SUBMITTED',score=null,internal_notes=null,student_feedback=null,feedback_published_at=null,current_version=current_version+1,row_version=row_version+1,updated_at=clock_timestamp() where id=${resourceId}::uuid and row_version=${body.row_version} returning row_version,current_version`;
@@ -194,6 +196,8 @@ export class P4LearningService {
       key: stableKey,
       payload: { target, ...body },
       work: async () => {
+        await this
+          .tx`select set_config('app.correction_reason',${body.reason ?? ""},true)`;
         const rows = await this.tx<
           { row_version: unknown; current_version: number }[]
         >`update app.assignment_submissions s set status='REVIEWED',score=${body.score},internal_notes=${body.internal_notes},student_feedback=${body.student_feedback},feedback_published_at=case when ${body.publish_feedback} then clock_timestamp() else null end,current_version=s.current_version+1,row_version=s.row_version+1,updated_at=clock_timestamp() from app.assignment_definitions d where s.id=${target}::uuid and d.id=s.assignment_definition_id and ${body.score}<=d.max_score and s.row_version=${body.row_version} returning s.row_version,s.current_version`;
@@ -274,6 +278,8 @@ export class P4LearningService {
                 ? "PERIOD_LOCKED"
                 : "VERSION_CONFLICT",
             );
+          await this
+            .tx`select set_config('app.correction_reason',${body.reason ?? ""},true)`;
           const updated = await this.tx<
             { row_version: unknown; current_version: number }[]
           >`update app.exam_results set score=${body.score},internal_notes=${body.internal_notes},student_feedback=${body.student_feedback},status='DRAFT',published_at=null,recorded_by_account_id=${this.actor.accountId}::uuid,current_version=current_version+1,row_version=row_version+1,updated_at=clock_timestamp() where id=${current[0].id}::uuid and row_version=${body.row_version} returning row_version,current_version`;
@@ -493,6 +499,56 @@ export class P4LearningService {
       .tx`select id,status,coverage,score,evidence,rule_snapshot,current_revision,row_version from app.student_week_summaries where enrollment_id=${calculated.enrollment_id}::uuid and plan_week_id=${week}::uuid`;
     return { student_id: student, ...calculated, summary: current[0] ?? null };
   }
+  prepareWeek(
+    studentIdValue: unknown,
+    weekIdValue: unknown,
+    idempotencyKey: unknown,
+  ) {
+    canOperate(this.actor);
+    const student = parse(id, studentIdValue),
+      week = parse(id, weekIdValue),
+      stableKey = parse(key, idempotencyKey);
+    return idempotent({
+      tx: this.tx,
+      actor: this.actor,
+      command: "P4_READY_WEEK",
+      key: stableKey,
+      payload: { student, week },
+      work: async () => {
+        const calculated = await this.calculate(student, week);
+        if (calculated.coverage < 1) throw new AppError("INCOMPLETE_WEEK");
+        const current = await this.tx<{ id: string; status: string }[]>`
+          select id,status from app.student_week_summaries where enrollment_id=${calculated.enrollment_id}::uuid
+          and plan_week_id=${week}::uuid for update`;
+        if (current[0]?.status === "APPROVED")
+          throw new AppError("PERIOD_LOCKED");
+        const summaryId = current[0]?.id ?? randomUUID();
+        if (!current[0])
+          await this
+            .tx`insert into app.student_week_summaries(id,workspace_id,enrollment_id,plan_week_id,status,coverage,score,evidence,rule_snapshot)
+            values(${summaryId}::uuid,${this.actor.workspaceId}::uuid,${calculated.enrollment_id}::uuid,${week}::uuid,'OPEN',${calculated.coverage},${calculated.score},${this.tx.json(calculated.evidence)},${this.tx.json(calculated.rule_snapshot)})`;
+        const rows = await this.tx<{ row_version: unknown }[]>`
+          update app.student_week_summaries set status='READY',coverage=${calculated.coverage},score=${calculated.score},
+          evidence=${this.tx.json(calculated.evidence)},rule_snapshot=${this.tx.json(calculated.rule_snapshot)},
+          row_version=row_version+1,updated_at=clock_timestamp() where id=${summaryId}::uuid returning row_version`;
+        await audit(
+          this.tx,
+          this.actor,
+          this.requestId,
+          "STUDENT_WEEK_READY",
+          "student_week_summary",
+          summaryId,
+        );
+        return {
+          id: summaryId,
+          status: "READY",
+          coverage: calculated.coverage,
+          score: calculated.score,
+          row_version: number(rows[0].row_version),
+        };
+      },
+    });
+  }
   approveWeek(
     studentIdValue: unknown,
     weekIdValue: unknown,
@@ -530,27 +586,22 @@ export class P4LearningService {
             status: string;
           }[]
         >`select id,row_version,current_revision,status from app.student_week_summaries where enrollment_id=${calculated.enrollment_id}::uuid and plan_week_id=${week}::uuid for update`;
-        const summaryId = current[0]?.id ?? randomUUID(),
-          revision = (current[0]?.current_revision ?? 0) + 1;
-        if (current[0]) {
-          if (
-            body.row_version !== number(current[0].row_version) ||
-            (!correction && current[0].status === "APPROVED") ||
-            (correction && !body.reason)
-          )
-            throw new AppError(
-              current[0].status === "APPROVED" && !correction
-                ? "PERIOD_LOCKED"
-                : "VERSION_CONFLICT",
-            );
-          await this
-            .tx`update app.student_week_summaries set status='APPROVED',coverage=${calculated.coverage},score=${calculated.score},evidence=${this.tx.json(calculated.evidence)},rule_snapshot=${this.tx.json(calculated.rule_snapshot)},current_revision=${revision},row_version=row_version+1,updated_at=clock_timestamp() where id=${summaryId}::uuid`;
-        } else {
-          if (correction || body.row_version !== null)
-            throw new AppError("VERSION_CONFLICT");
-          await this
-            .tx`insert into app.student_week_summaries(id,workspace_id,enrollment_id,plan_week_id,status,coverage,score,evidence,rule_snapshot,current_revision) values(${summaryId}::uuid,${this.actor.workspaceId}::uuid,${calculated.enrollment_id}::uuid,${week}::uuid,'APPROVED',${calculated.coverage},${calculated.score},${this.tx.json(calculated.evidence)},${this.tx.json(calculated.rule_snapshot)},1)`;
-        }
+        const item = current[0];
+        if (!item) throw new AppError("INVALID_STATE_TRANSITION");
+        if (
+          body.row_version !== number(item.row_version) ||
+          (!correction && item.status !== "READY") ||
+          (correction && (item.status !== "APPROVED" || !body.reason))
+        )
+          throw new AppError(
+            body.row_version !== number(item.row_version)
+              ? "VERSION_CONFLICT"
+              : "INVALID_STATE_TRANSITION",
+          );
+        const summaryId = item.id,
+          revision = item.current_revision + 1;
+        await this
+          .tx`update app.student_week_summaries set status='APPROVED',coverage=${calculated.coverage},score=${calculated.score},evidence=${this.tx.json(calculated.evidence)},rule_snapshot=${this.tx.json(calculated.rule_snapshot)},current_revision=${revision},row_version=row_version+1,updated_at=clock_timestamp() where id=${summaryId}::uuid`;
         const snapshot = {
           coverage: calculated.coverage,
           score: calculated.score,
@@ -572,7 +623,7 @@ export class P4LearningService {
           revision,
           coverage: calculated.coverage,
           score: calculated.score,
-          row_version: number(current[0]?.row_version ?? 0) + 1,
+          row_version: number(item.row_version) + 1,
         };
       },
     });

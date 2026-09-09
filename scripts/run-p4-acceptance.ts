@@ -326,9 +326,21 @@ try {
   evidence.deterministic_full_coverage = true;
   response = await request(
     mentor,
+    `/api/v1/students/${profile}/weeks/${weekId}/ready`,
+    "POST",
+    {},
+  );
+  prove(
+    response.response.status === 200 &&
+      response.result.status === "READY" &&
+      response.result.row_version === 2,
+  );
+  evidence.open_ready_transition = true;
+  response = await request(
+    mentor,
     `/api/v1/students/${profile}/weeks/${weekId}/approve`,
     "POST",
-    { row_version: null, reason: null },
+    { row_version: 2, reason: null },
   );
   prove(response.response.status === 200 && response.result.revision === 1);
   summaryId = response.result.id;
@@ -361,7 +373,7 @@ try {
     mentor,
     `/api/v1/students/${profile}/weeks/${weekId}/corrections`,
     "POST",
-    { row_version: 2, reason: "نسخة قديمة" },
+    { row_version: 4, reason: "نسخة قديمة" },
   );
   prove(stale.response.status === 409);
   evidence.stale_week_revision_rejected = true;
@@ -369,7 +381,7 @@ try {
     mentor,
     `/api/v1/students/${profile}/weeks/${weekId}/corrections`,
     "POST",
-    { row_version: 1, reason: "اعتماد الدرجة المصححة" },
+    { row_version: 3, reason: "اعتماد الدرجة المصححة" },
   );
   prove(
     response.response.status === 200 &&
@@ -392,8 +404,8 @@ try {
   prove(response.response.status === 404);
   evidence.cross_workspace_denied = true;
   const audits =
-    await db`select count(*) count from app.audit_events where workspace_id=${workspace}::uuid and action in ('CONTENT_PUBLISHED','ASSIGNMENT_SUBMITTED','ASSIGNMENT_REVIEWED','EXAM_RESULT_RECORDED','EXAM_RESULT_PUBLISHED','STUDENT_SELF_REVIEWED','STUDENT_WEEK_APPROVED','STUDENT_WEEK_CORRECTED')`;
-  prove(Number(audits[0].count) >= 8);
+    await db`select count(*) count from app.audit_events where workspace_id=${workspace}::uuid and action in ('CONTENT_PUBLISHED','ASSIGNMENT_SUBMITTED','ASSIGNMENT_REVIEWED','EXAM_RESULT_RECORDED','EXAM_RESULT_PUBLISHED','STUDENT_SELF_REVIEWED','STUDENT_WEEK_READY','STUDENT_WEEK_APPROVED','STUDENT_WEEK_CORRECTED')`;
+  prove(Number(audits[0].count) >= 9);
   evidence.atomic_audit = true;
   await mkdir("output/p4", { recursive: true });
   await writeFile(
@@ -426,6 +438,9 @@ try {
         "week_approval_immutable on app.student_week_approval_revisions",
         "exam_revision_immutable on app.exam_result_revisions",
         "assignment_revision_immutable on app.assignment_submission_revisions",
+        "self_review_revision_immutable on app.student_self_review_revisions",
+        "week_requires_draft_plan on app.plan_weeks",
+        "audit_immutable on app.audit_events",
       ])
         await tx.unsafe(
           `alter table ${trigger.split(" on ")[1]} disable trigger ${trigger.split(" on ")[0]}`,
@@ -434,6 +449,7 @@ try {
       await tx`delete from app.idempotency_records where workspace_id in (${workspace}::uuid,${outsiderWorkspace}::uuid)`;
       await tx`delete from app.student_week_approval_revisions where workspace_id=${workspace}::uuid`;
       await tx`delete from app.student_week_summaries where workspace_id=${workspace}::uuid`;
+      await tx`delete from app.student_self_review_revisions where workspace_id=${workspace}::uuid`;
       await tx`delete from app.student_self_reviews where workspace_id=${workspace}::uuid`;
       await tx`delete from app.exam_result_revisions where workspace_id=${workspace}::uuid`;
       await tx`delete from app.exam_results where workspace_id=${workspace}::uuid`;
@@ -467,6 +483,9 @@ try {
         "week_approval_immutable on app.student_week_approval_revisions",
         "exam_revision_immutable on app.exam_result_revisions",
         "assignment_revision_immutable on app.assignment_submission_revisions",
+        "self_review_revision_immutable on app.student_self_review_revisions",
+        "week_requires_draft_plan on app.plan_weeks",
+        "audit_immutable on app.audit_events",
       ])
         await tx.unsafe(
           `alter table ${trigger.split(" on ")[1]} enable trigger ${trigger.split(" on ")[0]}`,
