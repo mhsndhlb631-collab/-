@@ -78,6 +78,12 @@ beforeAll(async () => {
       "utf8",
     ),
   );
+  await db.exec(
+    await readFile("db/migrations/0021_learning_week_foundation.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("db/migrations/0022_learning_week_security.sql", "utf8"),
+  );
   await db.query(
     "insert into app.workspaces(id,name,timezone,week_starts_on) values($1,'one','Africa/Cairo',6),($2,'two','Africa/Cairo',6)",
     [w1, w2],
@@ -494,5 +500,92 @@ describe("local PostgreSQL foundation (not hosted Supabase acceptance)", () => {
         )
       ).rows[0],
     ).toEqual({ current_version: 2, review_status: "PENDING" });
+  });
+  it("preserves P4 learning revisions and approval snapshots", async () => {
+    const person = randomUUID(),
+      account = randomUUID(),
+      profile = randomUUID(),
+      template = randomUUID(),
+      cohort = randomUUID(),
+      plan = randomUUID(),
+      week = randomUUID(),
+      assignment = randomUUID(),
+      enrollment = randomUUID(),
+      submission = randomUUID(),
+      summary = randomUUID(),
+      approval = randomUUID();
+    await db.query(
+      "insert into app.persons(id,workspace_id,display_name) values($1,$2,'P4 student')",
+      [person, w1],
+    );
+    await db.query(
+      "insert into app.student_profiles(id,workspace_id,person_id) values($1,$2,$3)",
+      [profile, w1, person],
+    );
+    await db.query(
+      "insert into app.login_accounts(id,workspace_id,person_id,normalized_login_name,role) values($1,$2,$3,$4,'STUDENT')",
+      [account, w1, person, `p4_${account.replaceAll("-", "").slice(0, 8)}`],
+    );
+    await db.query(
+      "insert into app.program_templates(id,workspace_id,name,level) values($1,$2,$3,'L1')",
+      [template, w1, `P4 ${template}`],
+    );
+    await db.query(
+      "insert into app.cohorts(id,workspace_id,name,source_template_id,starts_on,ends_on) values($1,$2,$3,$4,'2026-09-06','2026-10-31')",
+      [cohort, w1, `P4 cohort ${cohort}`, template],
+    );
+    await db.query(
+      "insert into app.program_plans(id,workspace_id,cohort_id,version,name) values($1,$2,$3,1,'P4 plan')",
+      [plan, w1, cohort],
+    );
+    await db.query(
+      "insert into app.plan_weeks(id,workspace_id,plan_id,week_number,week_type,title) values($1,$2,$3,1,'STANDARD','Learning week')",
+      [week, w1, plan],
+    );
+    await db.query(
+      "insert into app.assignment_definitions(id,workspace_id,plan_week_id,title,instructions,due_day_offset,max_score) values($1,$2,$3,'Task','Answer',5,10)",
+      [assignment, w1, week],
+    );
+    await db.query(
+      "insert into app.enrollments(id,workspace_id,student_profile_id,cohort_id,effective_from) values($1,$2,$3,$4,'2026-09-01')",
+      [enrollment, w1, profile, cohort],
+    );
+    await db.query("select set_config('app.account_id',$1,false)", [account]);
+    await db.query(
+      "insert into app.assignment_submissions(id,workspace_id,enrollment_id,assignment_definition_id,answer,submitted_by_account_id) values($1,$2,$3,$4,'First',$5)",
+      [submission, w1, enrollment, assignment, account],
+    );
+    await db.query(
+      "update app.assignment_submissions set answer='Second',current_version=2,row_version=2 where id=$1",
+      [submission],
+    );
+    expect(
+      (
+        await db.query(
+          "select submission_version from app.assignment_submission_revisions where submission_id=$1 order by submission_version",
+          [submission],
+        )
+      ).rows,
+    ).toEqual([{ submission_version: 1 }, { submission_version: 2 }]);
+    await expect(
+      db.query(
+        "delete from app.assignment_submission_revisions where submission_id=$1",
+        [submission],
+      ),
+    ).rejects.toMatchObject({ code: "42501" });
+    await db.query(
+      "insert into app.student_week_summaries(id,workspace_id,enrollment_id,plan_week_id,status,coverage,score,evidence,rule_snapshot,current_revision) values($1,$2,$3,$4,'APPROVED',1,80,'{}','{}',1)",
+      [summary, w1, enrollment, week],
+    );
+    await db.query(
+      "insert into app.student_week_approval_revisions(id,workspace_id,summary_id,approval_revision,snapshot,approved_by_account_id,request_id) values($1,$2,$3,1,'{}',$4,$5)",
+      [approval, w1, summary, account, randomUUID()],
+    );
+    await expect(
+      db.query(
+        "update app.student_week_approval_revisions set snapshot='{}' where id=$1",
+        [approval],
+      ),
+    ).rejects.toMatchObject({ code: "42501" });
   });
 });

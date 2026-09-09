@@ -88,6 +88,32 @@ const trackingDefinition = z
       .strict(),
   })
   .strict();
+const contentDefinition = z
+  .object({
+    week_number: z.number().int().positive(),
+    title: shortText,
+    body: z.string().trim().min(1).max(10000),
+  })
+  .strict();
+const assignmentDefinition = z
+  .object({
+    week_number: z.number().int().positive(),
+    title: shortText,
+    instructions: z.string().trim().min(1).max(5000),
+    due_day_offset: z.number().int().min(0).max(6),
+    max_score: z.number().positive().max(100000),
+    weight: z.number().min(0).max(1000).default(1),
+  })
+  .strict();
+const examDefinition = z
+  .object({
+    week_number: z.number().int().positive(),
+    title: shortText,
+    day_offset: z.number().int().min(0).max(6),
+    max_score: z.number().positive().max(100000),
+    weight: z.number().min(0).max(1000).default(1),
+  })
+  .strict();
 
 function responsible(actor: RequestActor) {
   if (actor.role !== "RESPONSIBLE") throw new AppError("FORBIDDEN");
@@ -219,6 +245,9 @@ export class P1ProgramService {
           weeks: z.array(week).min(1).max(104),
           sessions: z.array(sessionDefinition).max(500).default([]),
           tracking: z.array(trackingDefinition).max(200).default([]),
+          content: z.array(contentDefinition).max(500).default([]),
+          assignments: z.array(assignmentDefinition).max(500).default([]),
+          exams: z.array(examDefinition).max(200).default([]),
         })
         .strict(),
       value,
@@ -232,6 +261,15 @@ export class P1ProgramService {
       body.sessions.some(
         (session) =>
           !body.weeks.some((item) => item.week_number === session.week_number),
+      )
+    )
+      throw new AppError("VALIDATION_ERROR");
+    if (
+      [...body.content, ...body.assignments, ...body.exams].some(
+        (item) =>
+          !body.weeks.some(
+            (weekItem) => weekItem.week_number === item.week_number,
+          ),
       )
     )
       throw new AppError("VALIDATION_ERROR");
@@ -303,6 +341,21 @@ export class P1ProgramService {
             ${item.schedule.due_time}::time
           )`;
         }
+        for (const item of body.content)
+          await this
+            .tx`insert into app.content_items(workspace_id,plan_week_id,title,body)
+            select ${this.actor.workspaceId}::uuid,id,${item.title},${item.body} from app.plan_weeks
+            where plan_id=${planId}::uuid and week_number=${item.week_number}`;
+        for (const item of body.assignments)
+          await this
+            .tx`insert into app.assignment_definitions(workspace_id,plan_week_id,title,instructions,due_day_offset,max_score,weight)
+            select ${this.actor.workspaceId}::uuid,id,${item.title},${item.instructions},${item.due_day_offset},${item.max_score},${item.weight}
+            from app.plan_weeks where plan_id=${planId}::uuid and week_number=${item.week_number}`;
+        for (const item of body.exams)
+          await this
+            .tx`insert into app.exam_definitions(workspace_id,plan_week_id,title,day_offset,max_score,weight)
+            select ${this.actor.workspaceId}::uuid,id,${item.title},${item.day_offset},${item.max_score},${item.weight}
+            from app.plan_weeks where plan_id=${planId}::uuid and week_number=${item.week_number}`;
         await this
           .tx`update app.program_plans set status='PUBLISHED' where id=${planId}::uuid`;
         await this
@@ -430,6 +483,24 @@ export class P1ProgramService {
           ) select workspace_id,${copiedId}::uuid,period_kind,start_week,end_week,days_of_week,due_time
             from app.tracking_schedules where tracking_definition_id=${definition.id}::uuid`;
         }
+        await this
+          .tx`insert into app.content_items(workspace_id,plan_week_id,title,body,published_at)
+          select ci.workspace_id,target.id,ci.title,ci.body,ci.published_at
+          from app.content_items ci join app.plan_weeks source_week on source_week.id=ci.plan_week_id
+          join app.plan_weeks target on target.plan_id=${planId}::uuid and target.week_number=source_week.week_number
+          where source_week.plan_id=${source.id}::uuid`;
+        await this
+          .tx`insert into app.assignment_definitions(workspace_id,plan_week_id,title,instructions,due_day_offset,max_score,weight)
+          select ad.workspace_id,target.id,ad.title,ad.instructions,ad.due_day_offset,ad.max_score,ad.weight
+          from app.assignment_definitions ad join app.plan_weeks source_week on source_week.id=ad.plan_week_id
+          join app.plan_weeks target on target.plan_id=${planId}::uuid and target.week_number=source_week.week_number
+          where source_week.plan_id=${source.id}::uuid`;
+        await this
+          .tx`insert into app.exam_definitions(workspace_id,plan_week_id,title,day_offset,max_score,weight)
+          select ed.workspace_id,target.id,ed.title,ed.day_offset,ed.max_score,ed.weight
+          from app.exam_definitions ed join app.plan_weeks source_week on source_week.id=ed.plan_week_id
+          join app.plan_weeks target on target.plan_id=${planId}::uuid and target.week_number=source_week.week_number
+          where source_week.plan_id=${source.id}::uuid`;
         await this
           .tx`update app.program_plans set status='PUBLISHED' where id=${planId}::uuid`;
         await this

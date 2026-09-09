@@ -1,6 +1,7 @@
 "use client";
 import { FormEvent, useState } from "react";
 import { TrackingWorkspace } from "./tracking-workspace";
+import { LearningWorkspace } from "./learning-workspace";
 
 type Overview = {
   actor_role: "RESPONSIBLE" | "MENTOR" | "STUDENT";
@@ -206,6 +207,11 @@ export function OperationsShell() {
         actorRole={data.actor_role}
         command={command}
       />
+      <LearningWorkspace
+        busy={busy}
+        actorRole={data.actor_role}
+        command={command}
+      />
       <section className="panel table-panel">
         <div className="panel-heading">
           <div>
@@ -387,6 +393,32 @@ function PlanForm({ busy, data = empty, submit }: FormProps) {
                   days_of_week: [5],
                   due_time: "21:00",
                 },
+              },
+            ],
+            content: [
+              {
+                week_number: 1,
+                title: "مدخل الأسبوع",
+                body: "اقرأ أهداف الأسبوع واستعد للتطبيق العملي.",
+              },
+            ],
+            assignments: [
+              {
+                week_number: 1,
+                title: "تطبيق الأسبوع",
+                instructions: "اكتب أهم فائدة وكيف ستطبقها.",
+                due_day_offset: 5,
+                max_score: 10,
+                weight: 1,
+              },
+            ],
+            exams: [
+              {
+                week_number: 1,
+                title: "اختبار الأسبوع",
+                day_offset: 6,
+                max_score: 20,
+                weight: 1,
               },
             ],
           });

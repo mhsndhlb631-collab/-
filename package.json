@@ -27,6 +27,7 @@
     "acceptance:p1": "node --env-file=.env.local scripts/run-p1-acceptance.ts",
     "acceptance:p2": "node --env-file=.env.local scripts/run-p2-acceptance.ts",
     "acceptance:p3": "node --env-file=.env.local scripts/run-p3-acceptance.ts",
+    "acceptance:p4": "node --env-file=.env.local scripts/run-p4-acceptance.ts",
     "vercel:configure": "node scripts/configure-vercel.ts"
   },
   "dependencies": {

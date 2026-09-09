@@ -17,4 +17,4 @@
 | Real acceptance         | Hosted Vercel/Supabase acceptance passed all student, mentor, paper, review, stale-version, isolation, audit, and exact-fixture-cleanup proofs. Evidence is stored locally in `output/p3/acceptance.json` as booleans only. |
 | Deployment              | Supabase migrations `0016` through `0020` are applied. GitHub Actions, production build, artifact smoke, Vercel `/health`, and database `/ready` are release gates.                                                         |
 
-P4 reporting, dashboards, alerts, and downstream analytics remain outside this delivery.
+P4 learning and weekly summaries remain outside this delivery. Reporting, dashboards, alerts, and downstream analytics begin in later phases.

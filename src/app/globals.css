@@ -10,6 +10,40 @@
   --gold: #c89645;
   font-family: "Segoe UI", Tahoma, Arial, sans-serif;
 }
+
+.learning-panel {
+  margin-top: 1.5rem;
+}
+.learning-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+.learning-grid > article {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 1rem;
+  background: #fffdf8;
+}
+.learning-item {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.learning-item:last-child {
+  border-bottom: 0;
+}
+.learning-item p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.inline-form {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.6rem;
+}
 * {
   box-sizing: border-box;
 }
