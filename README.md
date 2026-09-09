@@ -34,6 +34,7 @@ npm run smoke
 
 ## مستندات التنفيذ
 
+- [الملخص الشامل للمشروع وحالة جميع المراحل](PROJECT-SUMMARY.md)
 - [خطة P0 والاكتشاف](docs/p0-implementation-brief.md)
 - [مخطط P0 المجمد](docs/p0-schema.md)
 - [حالات المصادقة والصلاحيات](docs/p0-auth-and-scope.md)
