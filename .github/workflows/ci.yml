@@ -1,4 +1,4 @@
-name: P0 local foundation
+name: P1 program distribution
 on: [push, pull_request]
 permissions:
   contents: read
@@ -19,5 +19,4 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run smoke
-  # Real Supabase and hosted acceptance are separate mandatory P0 gates.
-  # This workflow's success alone never authorizes P1.
+  # Real Supabase and hosted acceptance remain separate mandatory P1 gates.

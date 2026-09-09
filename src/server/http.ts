@@ -26,6 +26,37 @@ export async function endpoint(
   try {
     body = { ...((await action(id)) as object), request_id: id };
   } catch (error) {
+    const technicalCode =
+      typeof error === "object" &&
+      error &&
+      "code" in error &&
+      /^[A-Z0-9_]{1,32}$/i.test(String(error.code))
+        ? String(error.code)
+        : error instanceof Error
+          ? error.name
+          : "UnknownError";
+    console.error(
+      JSON.stringify({
+        event: "request_failed",
+        request_id: id,
+        operation,
+        technical_code: technicalCode,
+        technical_stage:
+          typeof error === "object" &&
+          error &&
+          "technicalStage" in error &&
+          /^[a-z_]{1,32}$/.test(String(error.technicalStage))
+            ? String(error.technicalStage)
+            : undefined,
+        technical_routine:
+          typeof error === "object" &&
+          error &&
+          "routine" in error &&
+          /^[A-Za-z_]{1,64}$/.test(String(error.routine))
+            ? String(error.routine)
+            : undefined,
+      }),
+    );
     const failure = safeError(error, id);
     status = failure.status;
     body = failure.body;

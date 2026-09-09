@@ -64,6 +64,10 @@ export async function withAuthenticatedTransaction<T>(
     const row = rows[0];
     if (!row) throw new AppError("UNAUTHENTICATED");
     await tx`select set_config('app.account_id',${row.account_id},true),set_config('app.session_id',${sessionId},true)`;
+    const authority = await tx<{ allowed: boolean }[]>`
+      select app.actor_allows(${row.workspace_id}::uuid,NULL,true) as allowed`;
+    if (row.role === "RESPONSIBLE" && !authority[0]?.allowed)
+      throw new AppError("UNAUTHENTICATED");
     return work(tx, {
       accountId: row.account_id,
       workspaceId: row.workspace_id,

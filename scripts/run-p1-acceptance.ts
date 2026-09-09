@@ -57,6 +57,9 @@ const roles = [
   "STUDENT",
   "STUDENT",
 ] as const;
+const loginNames = roles.map(
+  (_, index) => `p1_${ids.workspace.replaceAll("-", "").slice(0, 12)}_${index}`,
+);
 const authIds: string[] = [];
 const password = randomBytes(24).toString("base64url");
 const evidence: Record<string, boolean> = {};
@@ -83,11 +86,18 @@ async function identity(index: number) {
   return email;
 }
 async function login(email: string) {
+  const accountIndex = ids.accounts.findIndex(
+    (value) => `${value}@${env.AUTH_INTERNAL_EMAIL_DOMAIN}` === email,
+  );
   const response = await fetch(`${origin}/api/v1/auth/login`, {
     method: "POST",
-    headers: { Origin: origin, "Content-Type": "application/json" },
+    headers: {
+      Origin: origin,
+      "Content-Type": "application/json",
+      "x-vercel-forwarded-for": `127.1.${ids.workspace.charCodeAt(0)}.${accountIndex + 1}`,
+    },
     body: JSON.stringify({
-      login_name: `p1_${ids.accounts.findIndex((value) => `${value}@${env.AUTH_INTERNAL_EMAIL_DOMAIN}` === email)}`,
+      login_name: loginNames[accountIndex],
       password,
     }),
   });
@@ -140,7 +150,7 @@ try {
     for (let i = 0; i < 2; i++)
       await tx`insert into app.student_profiles(id,workspace_id,person_id) values(${ids.profiles[i]}::uuid,${ids.workspace}::uuid,${ids.people[i + 3]}::uuid)`;
     for (let i = 0; i < ids.accounts.length; i++)
-      await tx`insert into app.login_accounts(id,workspace_id,person_id,normalized_login_name,role) values(${ids.accounts[i]}::uuid,${ids.workspace}::uuid,${ids.people[i]}::uuid,${`p1_${i}`},${roles[i]})`;
+      await tx`insert into app.login_accounts(id,workspace_id,person_id,normalized_login_name,role) values(${ids.accounts[i]}::uuid,${ids.workspace}::uuid,${ids.people[i]}::uuid,${loginNames[i]},${roles[i]})`;
   });
   const emails = [];
   for (let i = 0; i < ids.accounts.length; i++) emails.push(await identity(i));
@@ -152,7 +162,10 @@ try {
     "/api/v1/program-templates",
     { name: "برنامج البناء", level: "تمهيدي" },
   );
-  prove(templateA.response.status === 200);
+  if (templateA.response.status !== 200)
+    throw new Error(
+      `template_a_${templateA.response.status}_${String(templateA.result?.code ?? "unknown")}`,
+    );
   const replay = await command(
     responsibleCookie,
     "/api/v1/program-templates",
@@ -238,6 +251,7 @@ try {
   evidence.cohort_copy_is_historically_stable = true;
   const past2 = new Date(Date.now() - 7200000).toISOString(),
     past1 = new Date(Date.now() - 3600000).toISOString();
+  stage = "enroll_students";
   const enrollment1 = await command(responsibleCookie, "/api/v1/enrollments", {
     student_profile_id: ids.profiles[0],
     cohort_id: cohortA.result.id,
@@ -253,6 +267,7 @@ try {
   prove(
     enrollment1.response.status === 200 && enrollment2.response.status === 200,
   );
+  stage = "move_student";
   prove(
     (
       await command(responsibleCookie, "/api/v1/group-memberships", {
@@ -262,6 +277,7 @@ try {
       })
     ).response.status === 200,
   );
+  stage = "assign_mentor_a_first";
   prove(
     (
       await command(responsibleCookie, "/api/v1/mentor-assignments", {
@@ -271,6 +287,7 @@ try {
       })
     ).response.status === 200,
   );
+  stage = "assign_mentor_a_second";
   prove(
     (
       await command(responsibleCookie, "/api/v1/mentor-assignments", {
@@ -280,6 +297,7 @@ try {
       })
     ).response.status === 200,
   );
+  stage = "assign_mentor_b";
   prove(
     (
       await command(responsibleCookie, "/api/v1/mentor-assignments", {
@@ -294,25 +312,30 @@ try {
     mentor2 = await overview(await login(emails[2])),
     student1 = await overview(await login(emails[3])),
     student2 = await overview(await login(emails[4]));
+  stage = "role_scope_mentor_1";
   prove(
     mentor1.templates.length === 0 &&
       mentor1.cohorts.length === 1 &&
       mentor1.cohorts[0].id === cohortB.result.id,
   );
+  stage = "role_scope_mentor_2";
   prove(
     mentor2.templates.length === 0 &&
       mentor2.cohorts.length === 1 &&
       mentor2.cohorts[0].id === cohortA.result.id,
   );
+  stage = "role_scope_student_1";
   prove(
     student1.cohorts.length === 1 &&
       student1.cohorts[0].groups[0].id === cohortA.result.groups[1].id,
   );
+  stage = "role_scope_student_2";
   prove(
     student2.cohorts.length === 1 &&
       student2.cohorts[0].id === cohortB.result.id,
   );
   evidence.role_and_assignment_scope = true;
+  stage = "audit";
   const [audit] =
     await db`select count(*)::integer as count from app.audit_events where workspace_id=${ids.workspace}::uuid and action like 'P1_%' or workspace_id=${ids.workspace}::uuid and action in ('PROGRAM_TEMPLATE_CREATED','PROGRAM_PLAN_PUBLISHED','COHORT_CREATED','STUDENT_ENROLLED','STUDENT_GROUP_MOVED','MENTOR_ASSIGNED')`;
   prove(audit.count >= 12);
@@ -340,7 +363,9 @@ try {
         failure_code:
           typeof error === "object" && error && "code" in error
             ? String(error.code)
-            : "assertion",
+            : error instanceof Error && /^[a-z0-9_]+$/i.test(error.message)
+              ? error.message
+              : "assertion",
         evidence,
       },
       null,
@@ -354,6 +379,12 @@ try {
     await admin.auth.admin.deleteUser(authId).catch(() => {});
   await db
     .begin(async (tx) => {
+      await tx.unsafe(
+        "alter table app.plan_weeks disable trigger week_requires_draft_plan",
+      );
+      await tx.unsafe(
+        "alter table app.audit_events disable trigger audit_immutable",
+      );
       await tx`delete from app.group_memberships where workspace_id=${ids.workspace}::uuid`;
       await tx`delete from app.mentor_assignments where workspace_id=${ids.workspace}::uuid`;
       await tx`delete from app.enrollments where workspace_id=${ids.workspace}::uuid`;
@@ -364,20 +395,37 @@ try {
       await tx`delete from app.cohorts where workspace_id=${ids.workspace}::uuid`;
       await tx`delete from app.program_templates where workspace_id=${ids.workspace}::uuid`;
       await tx`delete from app.idempotency_records where workspace_id=${ids.workspace}::uuid`;
-      await tx.unsafe(
-        "alter table app.audit_events disable trigger audit_immutable",
-      );
       await tx`delete from app.audit_events where workspace_id=${ids.workspace}::uuid`;
       await tx.unsafe(
         "alter table app.audit_events enable trigger audit_immutable",
+      );
+      await tx.unsafe(
+        "alter table app.plan_weeks enable trigger week_requires_draft_plan",
       );
       await tx`delete from app.login_accounts where workspace_id=${ids.workspace}::uuid`;
       await tx`delete from app.student_profiles where workspace_id=${ids.workspace}::uuid`;
       await tx`delete from app.persons where workspace_id=${ids.workspace}::uuid`;
       await tx`delete from app.workspaces where id=${ids.workspace}::uuid`;
     })
-    .catch(() => {
-      console.error("ACTION REQUIRED: P1 fixture cleanup failed.");
+    .catch((cleanupError) => {
+      const detail =
+        typeof cleanupError === "object" && cleanupError
+          ? {
+              code:
+                "code" in cleanupError ? String(cleanupError.code) : "unknown",
+              constraint:
+                "constraint_name" in cleanupError
+                  ? String(cleanupError.constraint_name)
+                  : "unknown",
+              routine:
+                "routine" in cleanupError
+                  ? String(cleanupError.routine)
+                  : "unknown",
+            }
+          : { code: "unknown", constraint: "unknown", routine: "unknown" };
+      console.error(
+        `ACTION REQUIRED: P1 fixture cleanup failed (${detail.code}/${detail.constraint}/${detail.routine}).`,
+      );
       process.exitCode = 1;
     });
   await db.end();

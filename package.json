@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "dev:runtime": "node scripts/dev-runtime.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",

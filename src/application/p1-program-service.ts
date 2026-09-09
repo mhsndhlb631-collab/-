@@ -27,6 +27,15 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   if (!result.success) throw new AppError("VALIDATION_ERROR");
   return result.data;
 }
+async function atStage<T>(name: string, work: () => Promise<T>) {
+  try {
+    return await work();
+  } catch (error) {
+    if (typeof error === "object" && error)
+      Object.assign(error, { technicalStage: name });
+    throw error;
+  }
+}
 
 async function idempotent<T extends { id: string }>(input: {
   tx: postgres.TransactionSql;
@@ -37,23 +46,37 @@ async function idempotent<T extends { id: string }>(input: {
   work: () => Promise<T>;
 }) {
   const requestHash = hash(input.payload);
-  await input.tx`insert into app.idempotency_records(workspace_id,actor_account_id,command,key,request_hash,status,expires_at)
+  const context = await input.tx<{ matches: boolean; allowed: boolean }[]>`
+    select app.request_account_id()=${input.actor.accountId}::uuid as matches,
+      app.actor_allows(${input.actor.workspaceId}::uuid,NULL,true) as allowed`;
+  if (!context[0]?.matches || !context[0]?.allowed)
+    throw new AppError("UNAUTHENTICATED");
+  await atStage(
+    "idempotency_reserve",
+    () => input.tx`insert into app.idempotency_records(workspace_id,actor_account_id,command,key,request_hash,status,expires_at)
     values(${input.actor.workspaceId}::uuid,${input.actor.accountId}::uuid,${input.command},${input.key},${requestHash},'IN_PROGRESS',clock_timestamp()+interval '7 days')
-    on conflict(workspace_id,actor_account_id,command,key) do nothing`;
-  const records = await input.tx<
-    { request_hash: string; status: string; safe_result: T | null }[]
-  >`select request_hash,status,safe_result from app.idempotency_records
+    on conflict(workspace_id,actor_account_id,command,key) do nothing`,
+  );
+  const records = await atStage(
+    "idempotency_read",
+    () => input.tx<
+      { request_hash: string; status: string; safe_result: T | null }[]
+    >`select request_hash,status,safe_result from app.idempotency_records
     where workspace_id=${input.actor.workspaceId}::uuid and actor_account_id=${input.actor.accountId}::uuid
-      and command=${input.command} and key=${input.key} for update`;
+      and command=${input.command} and key=${input.key} for update`,
+  );
   const record = records[0];
   if (!record || record.request_hash !== requestHash)
     throw new AppError("IDEMPOTENCY_CONFLICT");
   if (record.status === "SUCCEEDED" && record.safe_result)
     return record.safe_result;
-  const result = await input.work();
-  await input.tx`update app.idempotency_records set status='SUCCEEDED',safe_result=${input.tx.json(result)},
+  const result = await atStage("command_work", input.work);
+  await atStage(
+    "idempotency_finish",
+    () => input.tx`update app.idempotency_records set status='SUCCEEDED',safe_result=${input.tx.json(result)},
     updated_at=clock_timestamp() where workspace_id=${input.actor.workspaceId}::uuid
-    and actor_account_id=${input.actor.accountId}::uuid and command=${input.command} and key=${input.key}`;
+    and actor_account_id=${input.actor.accountId}::uuid and command=${input.command} and key=${input.key}`,
+  );
   return result;
 }
 
