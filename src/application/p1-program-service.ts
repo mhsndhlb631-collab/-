@@ -49,6 +49,45 @@ const sessionDefinition = z
     metrics: z.array(sessionMetric).max(30),
   })
   .strict();
+const trackingDefinition = z
+  .object({
+    name: shortText,
+    meaning: z.string().trim().min(1).max(500),
+    unit: z.string().trim().min(1).max(40).nullable().default(null),
+    value_type: z.enum([
+      "BOOLEAN",
+      "COUNT",
+      "PERCENT",
+      "SCORE",
+      "DURATION",
+      "NUMBER",
+      "ENUM",
+      "SHORT_TEXT",
+    ]),
+    constraints: z.record(z.string(), z.unknown()).default({}),
+    target: z.record(z.string(), z.unknown()).default({}),
+    allowed_sources: z
+      .array(z.enum(["STUDENT", "MENTOR", "PAPER_TRANSCRIBED"]))
+      .min(1),
+    allows_batch: z.boolean().default(false),
+    allows_weekly_summary: z.boolean().default(false),
+    requires_review: z.boolean().default(false),
+    weight: z.number().min(0).max(1000).default(1),
+    schedule: z
+      .object({
+        period_kind: z.enum(["DAILY", "WEEKLY"]),
+        start_week: z.number().int().positive(),
+        end_week: z.number().int().positive().nullable().default(null),
+        days_of_week: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+        due_time: z
+          .string()
+          .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+          .nullable()
+          .default(null),
+      })
+      .strict(),
+  })
+  .strict();
 
 function responsible(actor: RequestActor) {
   if (actor.role !== "RESPONSIBLE") throw new AppError("FORBIDDEN");
@@ -179,6 +218,7 @@ export class P1ProgramService {
           name: shortText,
           weeks: z.array(week).min(1).max(104),
           sessions: z.array(sessionDefinition).max(500).default([]),
+          tracking: z.array(trackingDefinition).max(200).default([]),
         })
         .strict(),
       value,
@@ -192,6 +232,20 @@ export class P1ProgramService {
       body.sessions.some(
         (session) =>
           !body.weeks.some((item) => item.week_number === session.week_number),
+      )
+    )
+      throw new AppError("VALIDATION_ERROR");
+    if (
+      new Set(body.tracking.map((item) => item.name)).size !==
+        body.tracking.length ||
+      body.tracking.some(
+        (item) =>
+          (item.schedule.end_week !== null &&
+            item.schedule.end_week < item.schedule.start_week) ||
+          (item.schedule.period_kind === "WEEKLY" &&
+            item.schedule.days_of_week.length !== 1) ||
+          new Set(item.schedule.days_of_week).size !==
+            item.schedule.days_of_week.length,
       )
     )
       throw new AppError("VALIDATION_ERROR");
@@ -227,6 +281,27 @@ export class P1ProgramService {
             await this
               .tx`insert into app.session_metric_definitions(workspace_id,session_definition_id,name,value_type,required,applies_to,constraints)
               values(${this.actor.workspaceId}::uuid,${definitionId}::uuid,${metric.name},${metric.value_type},${metric.required},${this.tx.json(metric.applies_to)},${this.tx.json(metric.constraints as postgres.JSONValue)})`;
+        }
+        for (const item of body.tracking) {
+          const definitionId = randomUUID();
+          await this.tx`insert into app.tracking_definitions(
+            id,workspace_id,plan_id,name,meaning,unit,value_type,constraints,target,
+            allowed_sources,allows_batch,allows_weekly_summary,requires_review,weight
+          ) values(
+            ${definitionId}::uuid,${this.actor.workspaceId}::uuid,${planId}::uuid,
+            ${item.name},${item.meaning},${item.unit},${item.value_type},
+            ${this.tx.json(item.constraints as postgres.JSONValue)},
+            ${this.tx.json(item.target as postgres.JSONValue)},
+            ${this.tx.json(item.allowed_sources)},${item.allows_batch},
+            ${item.allows_weekly_summary},${item.requires_review},${item.weight}
+          )`;
+          await this.tx`insert into app.tracking_schedules(
+            workspace_id,tracking_definition_id,period_kind,start_week,end_week,days_of_week,due_time
+          ) values(
+            ${this.actor.workspaceId}::uuid,${definitionId}::uuid,${item.schedule.period_kind},
+            ${item.schedule.start_week},${item.schedule.end_week},${item.schedule.days_of_week},
+            ${item.schedule.due_time}::time
+          )`;
         }
         await this
           .tx`update app.program_plans set status='PUBLISHED' where id=${planId}::uuid`;
@@ -319,6 +394,41 @@ export class P1ProgramService {
           await this
             .tx`insert into app.session_metric_definitions(workspace_id,session_definition_id,name,value_type,required,applies_to,constraints)
             select workspace_id,${copiedId}::uuid,name,value_type,required,applies_to,constraints from app.session_metric_definitions where session_definition_id=${definition.id}::uuid`;
+        }
+        const sourceTracking = await this.tx<
+          {
+            id: string;
+            name: string;
+            meaning: string;
+            unit: string | null;
+            value_type: string;
+            constraints: postgres.JSONValue;
+            target: postgres.JSONValue;
+            allowed_sources: postgres.JSONValue;
+            allows_batch: boolean;
+            allows_weekly_summary: boolean;
+            requires_review: boolean;
+            weight: number;
+          }[]
+        >`select id,name,meaning,unit,value_type,constraints,target,allowed_sources,
+            allows_batch,allows_weekly_summary,requires_review,weight
+          from app.tracking_definitions where plan_id=${source.id}::uuid order by id`;
+        for (const definition of sourceTracking) {
+          const copiedId = randomUUID();
+          await this.tx`insert into app.tracking_definitions(
+            id,workspace_id,plan_id,name,meaning,unit,value_type,constraints,target,
+            allowed_sources,allows_batch,allows_weekly_summary,requires_review,weight
+          ) values(
+            ${copiedId}::uuid,${this.actor.workspaceId}::uuid,${planId}::uuid,
+            ${definition.name},${definition.meaning},${definition.unit},${definition.value_type},
+            ${this.tx.json(definition.constraints)},${this.tx.json(definition.target)},
+            ${this.tx.json(definition.allowed_sources)},${definition.allows_batch},
+            ${definition.allows_weekly_summary},${definition.requires_review},${definition.weight}
+          )`;
+          await this.tx`insert into app.tracking_schedules(
+            workspace_id,tracking_definition_id,period_kind,start_week,end_week,days_of_week,due_time
+          ) select workspace_id,${copiedId}::uuid,period_kind,start_week,end_week,days_of_week,due_time
+            from app.tracking_schedules where tracking_definition_id=${definition.id}::uuid`;
         }
         await this
           .tx`update app.program_plans set status='PUBLISHED' where id=${planId}::uuid`;
@@ -509,6 +619,6 @@ export class P1ProgramService {
         from app.cohorts c left join app.groups g on g.cohort_id=c.id
         group by c.id order by c.starts_on desc,c.id`,
     ]);
-    return { templates, plans, cohorts };
+    return { actor_role: this.actor.role, templates, plans, cohorts };
   }
 }

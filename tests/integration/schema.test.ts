@@ -57,6 +57,12 @@ beforeAll(async () => {
   await db.exec(
     await readFile("db/migrations/0015_session_record_guards.sql", "utf8"),
   );
+  await db.exec(
+    await readFile("db/migrations/0016_tracking_foundation.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("db/migrations/0017_tracking_security.sql", "utf8"),
+  );
   await db.query(
     "insert into app.workspaces(id,name,timezone,week_starts_on) values($1,'one','Africa/Cairo',6),($2,'two','Africa/Cairo',6)",
     [w1, w2],
@@ -361,5 +367,117 @@ describe("local PostgreSQL foundation (not hosted Supabase acceptance)", () => {
         [w1, definition, group],
       ),
     ).rejects.toMatchObject({ code: "23505" });
+  });
+
+  it("enforces P3 entitlement values and immutable versioned history", async () => {
+    const person = randomUUID(),
+      profile = randomUUID(),
+      account = randomUUID(),
+      template = randomUUID(),
+      cohort = randomUUID(),
+      plan = randomUUID(),
+      definition = randomUUID(),
+      enrollment = randomUUID(),
+      entry = randomUUID(),
+      review = randomUUID();
+    await db.query(
+      "insert into app.persons(id,workspace_id,display_name) values($1,$2,'Tracking student')",
+      [person, w1],
+    );
+    await db.query(
+      "insert into app.student_profiles(id,workspace_id,person_id) values($1,$2,$3)",
+      [profile, w1, person],
+    );
+    await db.query(
+      "insert into app.login_accounts(id,workspace_id,person_id,normalized_login_name,role) values($1,$2,$3,$4,'STUDENT')",
+      [account, w1, person, `track_${account.replaceAll("-", "").slice(0, 8)}`],
+    );
+    await db.query(
+      "insert into app.program_templates(id,workspace_id,name,level) values($1,$2,$3,'L1')",
+      [template, w1, `Tracking ${template}`],
+    );
+    await db.query(
+      "insert into app.cohorts(id,workspace_id,name,source_template_id,starts_on,ends_on) values($1,$2,$3,$4,'2026-09-06','2026-10-31')",
+      [cohort, w1, `Tracking cohort ${cohort}`, template],
+    );
+    await db.query(
+      "insert into app.program_plans(id,workspace_id,cohort_id,version,name) values($1,$2,$3,1,'Tracking plan')",
+      [plan, w1, cohort],
+    );
+    await db.query(
+      `insert into app.tracking_definitions(id,workspace_id,plan_id,name,meaning,value_type,constraints,target,allowed_sources,requires_review)
+       values($1,$2,$3,'ورد','عدد الصفحات','COUNT','{"min":0,"max":10}','{"min":2}','["STUDENT","MENTOR"]',true)`,
+      [definition, w1, plan],
+    );
+    await db.query(
+      "insert into app.tracking_schedules(workspace_id,tracking_definition_id,period_kind,start_week,days_of_week) values($1,$2,'DAILY',1,ARRAY[3]::smallint[])",
+      [w1, definition],
+    );
+    await db.query(
+      "update app.program_plans set status='PUBLISHED' where id=$1",
+      [plan],
+    );
+    await db.query(
+      "update app.cohorts set current_plan_id=$1,status='ACTIVE' where id=$2",
+      [plan, cohort],
+    );
+    await db.query(
+      "insert into app.enrollments(id,workspace_id,student_profile_id,cohort_id,effective_from) values($1,$2,$3,$4,'2026-09-01')",
+      [enrollment, w1, profile, cohort],
+    );
+    await expect(
+      db.query(
+        "update app.tracking_definitions set name='changed' where id=$1",
+        [definition],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    await expect(
+      db.query(
+        `insert into app.tracking_entries(workspace_id,enrollment_id,tracking_definition_id,period_start,period_end,value,source,occurred_at,recorded_by_account_id)
+         values($1,$2,$3,'2026-09-09','2026-09-09','11','STUDENT','2026-09-09T12:00:00Z',$4)`,
+        [w1, enrollment, definition, account],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    await db.query(
+      `insert into app.tracking_entries(id,workspace_id,enrollment_id,tracking_definition_id,period_start,period_end,value,source,occurred_at,recorded_by_account_id)
+       values($1,$2,$3,$4,'2026-09-09','2026-09-09','4','STUDENT','2026-09-09T12:00:00Z',$5)`,
+      [entry, w1, enrollment, definition, account],
+    );
+    expect(
+      (
+        await db.query(
+          "select entry_version from app.tracking_entry_revisions where tracking_entry_id=$1",
+          [entry],
+        )
+      ).rows,
+    ).toEqual([{ entry_version: 1 }]);
+    await db.query(
+      `insert into app.tracking_reviews(id,workspace_id,tracking_entry_id,entry_version,decision,reviewer_account_id,request_id)
+       values($1,$2,$3,1,'VERIFIED',$4,$5)`,
+      [review, w1, entry, account, randomUUID()],
+    );
+    await expect(
+      db.query("delete from app.tracking_reviews where id=$1", [review]),
+    ).rejects.toMatchObject({ code: "42501" });
+    await db.query(
+      "update app.tracking_entries set value='5',row_version=row_version+1 where id=$1",
+      [entry],
+    );
+    expect(
+      (
+        await db.query(
+          "select entry_version from app.tracking_entry_revisions where tracking_entry_id=$1 order by entry_version",
+          [entry],
+        )
+      ).rows,
+    ).toEqual([{ entry_version: 1 }, { entry_version: 2 }]);
+    expect(
+      (
+        await db.query(
+          "select current_version,review_status from app.tracking_entries where id=$1",
+          [entry],
+        )
+      ).rows[0],
+    ).toEqual({ current_version: 2, review_status: "PENDING" });
   });
 });

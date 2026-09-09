@@ -321,8 +321,66 @@ label {
   text-align: center;
   padding: 2rem;
 }
+.tracking-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.tracking-grid > article {
+  padding: 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fffefa;
+}
+.tracking-grid header,
+.review-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+.tracking-grid header div,
+.tracking-grid form {
+  display: grid;
+  gap: 0.65rem;
+}
+.tracking-grid header small {
+  display: block;
+  color: var(--muted);
+}
+.tracking-grid p {
+  min-height: 2.8rem;
+  color: var(--muted);
+}
+.tracking-grid form {
+  margin-top: 1rem;
+}
+.tracking-status {
+  padding: 0.3rem 0.6rem;
+  border-radius: 99px;
+  background: #eee9dc;
+  color: #685d43;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+.status-verified,
+.status-not_required {
+  background: #dcebe4;
+  color: var(--green);
+}
+.status-needs_correction {
+  background: #f8ddd6;
+  color: #853627;
+}
+.review-actions {
+  margin-top: 0.75rem;
+}
 @media (max-width: 800px) {
   .roster-grid {
+    grid-template-columns: 1fr;
+  }
+  .tracking-grid {
     grid-template-columns: 1fr;
   }
   .login-page {

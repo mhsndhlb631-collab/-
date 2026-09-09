@@ -1,7 +1,9 @@
 "use client";
 import { FormEvent, useState } from "react";
+import { TrackingWorkspace } from "./tracking-workspace";
 
 type Overview = {
+  actor_role: "RESPONSIBLE" | "MENTOR" | "STUDENT";
   templates: { id: string; name: string; level: string; status: string }[];
   plans: {
     id: string;
@@ -27,7 +29,13 @@ type Overview = {
     row_version: number;
   }[];
 };
-const empty: Overview = { templates: [], plans: [], cohorts: [], sessions: [] };
+const empty: Overview = {
+  actor_role: "RESPONSIBLE",
+  templates: [],
+  plans: [],
+  cohorts: [],
+  sessions: [],
+};
 
 export function OperationsShell() {
   const [data, setData] = useState<Overview>(empty),
@@ -146,7 +154,7 @@ export function OperationsShell() {
       <header className="topbar">
         <div>
           <span className="eyebrow">قِوام · التشغيل</span>
-          <h1>البرنامج والجلسات</h1>
+          <h1>البرنامج والجلسات والتتبع</h1>
         </div>
         <span className="status-dot">متصل</span>
       </header>
@@ -179,14 +187,23 @@ export function OperationsShell() {
           <span>جلسات</span>
         </article>
       </section>
-      <section className="workspace-grid">
-        <TemplateForm busy={busy} submit={command} />
-        <PlanForm busy={busy} data={data} submit={command} />
-        <CohortForm busy={busy} data={data} submit={command} />
-      </section>
-      <SessionWorkspace
+      {data.actor_role === "RESPONSIBLE" && (
+        <section className="workspace-grid">
+          <TemplateForm busy={busy} submit={command} />
+          <PlanForm busy={busy} data={data} submit={command} />
+          <CohortForm busy={busy} data={data} submit={command} />
+        </section>
+      )}
+      {data.actor_role !== "STUDENT" && (
+        <SessionWorkspace
+          busy={busy}
+          sessions={data.sessions}
+          command={command}
+        />
+      )}
+      <TrackingWorkspace
         busy={busy}
-        sessions={data.sessions}
+        actorRole={data.actor_role}
         command={command}
       />
       <section className="panel table-panel">
@@ -308,6 +325,68 @@ function PlanForm({ busy, data = empty, submit }: FormProps) {
                     constraints: { options: ["ممتاز", "جيد", "يحتاج متابعة"] },
                   },
                 ],
+              },
+            ],
+            tracking: [
+              {
+                name: "ورد القرآن",
+                meaning: "عدد صفحات الورد المقروءة في اليوم",
+                unit: "صفحة",
+                value_type: "COUNT",
+                constraints: { min: 0, max: 100 },
+                target: { min: 2 },
+                allowed_sources: ["STUDENT", "MENTOR", "PAPER_TRANSCRIBED"],
+                allows_batch: true,
+                allows_weekly_summary: false,
+                requires_review: true,
+                weight: 1,
+                schedule: {
+                  period_kind: "DAILY",
+                  start_week: 1,
+                  end_week: null,
+                  days_of_week: [0, 1, 2, 3, 4, 5, 6],
+                  due_time: "22:00",
+                },
+              },
+              {
+                name: "الصلاة في وقتها",
+                meaning: "المحافظة على الصلوات المفروضة في وقتها",
+                unit: null,
+                value_type: "BOOLEAN",
+                constraints: {},
+                target: { value: true },
+                allowed_sources: ["STUDENT", "MENTOR", "PAPER_TRANSCRIBED"],
+                allows_batch: true,
+                allows_weekly_summary: false,
+                requires_review: false,
+                weight: 1,
+                schedule: {
+                  period_kind: "DAILY",
+                  start_week: 1,
+                  end_week: null,
+                  days_of_week: [0, 1, 2, 3, 4, 5, 6],
+                  due_time: "23:00",
+                },
+              },
+              {
+                name: "محاسبة الأسبوع",
+                meaning: "تقييم أسبوعي مختصر للالتزام والتقدم",
+                unit: "من 10",
+                value_type: "SCORE",
+                constraints: { min: 0, max: 10 },
+                target: { min: 7 },
+                allowed_sources: ["STUDENT", "MENTOR", "PAPER_TRANSCRIBED"],
+                allows_batch: true,
+                allows_weekly_summary: true,
+                requires_review: true,
+                weight: 1,
+                schedule: {
+                  period_kind: "WEEKLY",
+                  start_week: 1,
+                  end_week: null,
+                  days_of_week: [5],
+                  due_time: "21:00",
+                },
               },
             ],
           });

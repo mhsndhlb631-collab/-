@@ -16,6 +16,7 @@ export const errorDefinitions = {
     422,
     "لا يمكن إغلاق الجلسة قبل استكمال البيانات المطلوبة.",
   ],
+  ENTRY_MODE_NOT_ALLOWED: [422, "طريقة إدخال هذا العنصر غير مسموحة."],
   RATE_LIMITED: [429, "محاولات كثيرة. حاول لاحقًا."],
   DEPENDENCY_UNAVAILABLE: [503, "الخدمة غير جاهزة حاليًا."],
   INTERNAL_ERROR: [500, "تعذر إتمام العملية."],
