@@ -11,6 +11,11 @@ export const errorDefinitions = {
   VERSION_CONFLICT: [409, "تغير السجل. أعد تحميله ثم حاول مجددًا."],
   INVALID_STATE_TRANSITION: [409, "حالة السجل لا تسمح بهذه العملية."],
   IDEMPOTENCY_CONFLICT: [409, "استُخدم مفتاح الطلب مع بيانات مختلفة."],
+  PERIOD_LOCKED: [409, "السجل مغلق ويلزم مسار تصحيح."],
+  INCOMPLETE_SESSION: [
+    422,
+    "لا يمكن إغلاق الجلسة قبل استكمال البيانات المطلوبة.",
+  ],
   RATE_LIMITED: [429, "محاولات كثيرة. حاول لاحقًا."],
   DEPENDENCY_UNAVAILABLE: [503, "الخدمة غير جاهزة حاليًا."],
   INTERNAL_ERROR: [500, "تعذر إتمام العملية."],

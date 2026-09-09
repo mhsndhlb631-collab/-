@@ -18,8 +18,16 @@ type Overview = {
     status: string;
     groups: { id: string; name: string }[];
   }[];
+  sessions: {
+    id: string;
+    group_name: string;
+    name: string;
+    starts_at: string;
+    status: string;
+    row_version: number;
+  }[];
 };
-const empty: Overview = { templates: [], plans: [], cohorts: [] };
+const empty: Overview = { templates: [], plans: [], cohorts: [], sessions: [] };
 
 export function OperationsShell() {
   const [data, setData] = useState<Overview>(empty),
@@ -27,17 +35,24 @@ export function OperationsShell() {
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
   async function load() {
-    const response = await fetch("/api/v1/programs", { cache: "no-store" });
-    if (!response.ok) throw new Error("تعذر تحميل مساحة العمل.");
-    setData(await response.json());
+    const [response, sessionsResponse] = await Promise.all([
+      fetch("/api/v1/programs", { cache: "no-store" }),
+      fetch("/api/v1/sessions", { cache: "no-store" }),
+    ]);
+    if (!response.ok || !sessionsResponse.ok)
+      throw new Error("تعذر تحميل مساحة العمل.");
+    setData({
+      ...(await response.json()),
+      sessions: (await sessionsResponse.json()).sessions,
+    });
     setSignedIn(true);
   }
-  async function command(path: string, body: unknown) {
+  async function command(path: string, body: unknown, method = "POST") {
     setBusy(true);
     setMessage("");
     try {
       const response = await fetch(path, {
-        method: "POST",
+        method,
         headers: {
           "Content-Type": "application/json",
           "Idempotency-Key": crypto.randomUUID(),
@@ -49,6 +64,7 @@ export function OperationsShell() {
         throw new Error(result.message ?? "تعذر تنفيذ العملية.");
       await load();
       setMessage("تم الحفظ بنجاح.");
+      return result;
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "تعذر تنفيذ العملية.",
@@ -130,7 +146,7 @@ export function OperationsShell() {
       <header className="topbar">
         <div>
           <span className="eyebrow">قِوام · التشغيل</span>
-          <h1>البرنامج والتوزيع</h1>
+          <h1>البرنامج والجلسات</h1>
         </div>
         <span className="status-dot">متصل</span>
       </header>
@@ -158,12 +174,21 @@ export function OperationsShell() {
           <strong>{data.cohorts.flatMap((c) => c.groups).length}</strong>
           <span>مجموعات</span>
         </article>
+        <article>
+          <strong>{data.sessions.length}</strong>
+          <span>جلسات</span>
+        </article>
       </section>
       <section className="workspace-grid">
         <TemplateForm busy={busy} submit={command} />
         <PlanForm busy={busy} data={data} submit={command} />
         <CohortForm busy={busy} data={data} submit={command} />
       </section>
+      <SessionWorkspace
+        busy={busy}
+        sessions={data.sessions}
+        command={command}
+      />
       <section className="panel table-panel">
         <div className="panel-heading">
           <div>
@@ -199,7 +224,7 @@ export function OperationsShell() {
 type FormProps = {
   busy: boolean;
   data?: Overview;
-  submit: (path: string, body: unknown) => Promise<void>;
+  submit: (path: string, body: unknown) => Promise<unknown>;
 };
 function TemplateForm({ busy, submit }: FormProps) {
   return (
@@ -256,6 +281,33 @@ function PlanForm({ busy, data = empty, submit }: FormProps) {
                 week_type: "STANDARD",
                 title: "أسبوع البناء",
                 objectives: ["التطبيق"],
+              },
+            ],
+            sessions: [
+              {
+                week_number: 1,
+                name: "اللقاء التربوي",
+                session_type: "GROUP",
+                day_offset: 1,
+                starts_at: "18:00",
+                duration_minutes: 90,
+                attendance_required: true,
+                metrics: [
+                  {
+                    name: "التفاعل",
+                    value_type: "SCORE",
+                    required: true,
+                    applies_to: ["PRESENT", "LATE"],
+                    constraints: { min: 0, max: 10 },
+                  },
+                  {
+                    name: "الأدب",
+                    value_type: "ENUM",
+                    required: true,
+                    applies_to: ["PRESENT", "LATE"],
+                    constraints: { options: ["ممتاز", "جيد", "يحتاج متابعة"] },
+                  },
+                ],
               },
             ],
           });
@@ -346,5 +398,199 @@ function CohortForm({ busy, data = empty, submit }: FormProps) {
         <button disabled={busy}>إنشاء الدفعة</button>
       </form>
     </article>
+  );
+}
+
+type SessionSummary = Overview["sessions"][number];
+type SessionDetail = {
+  session: SessionSummary & { attendance_required: boolean };
+  roster: {
+    id: string;
+    display_name: string;
+    attendance_status: string;
+    reason: string | null;
+    attendance_row_version: number;
+    metrics: {
+      definition_id: string;
+      name: string;
+      value_type: string;
+      required: boolean;
+      value: unknown;
+      row_version: number | null;
+    }[];
+  }[];
+};
+function SessionWorkspace({
+  busy,
+  sessions,
+  command,
+}: {
+  busy: boolean;
+  sessions: SessionSummary[];
+  command: (path: string, body: unknown, method?: string) => Promise<unknown>;
+}) {
+  const [detail, setDetail] = useState<SessionDetail | null>(null);
+  async function openDetail(id: string) {
+    const response = await fetch(`/api/v1/sessions/${id}`, {
+      cache: "no-store",
+    });
+    if (response.ok) setDetail(await response.json());
+  }
+  async function act(path: string, body: unknown, method = "POST") {
+    await command(path, body, method);
+    await openDetail(detail?.session.id ?? path.split("/")[4]);
+  }
+  return (
+    <section className="panel table-panel session-workspace">
+      <div className="panel-heading">
+        <div>
+          <span className="section-kicker">الجلسات</span>
+          <h2>مساحة تسجيل اللقاء</h2>
+        </div>
+        <span className="muted">حفظ جزئي ثم إغلاق</span>
+      </div>
+      <div className="session-tabs">
+        {sessions.map((s) => (
+          <button
+            className="secondary"
+            key={s.id}
+            onClick={() => void openDetail(s.id)}
+          >
+            {s.name} · {s.group_name}
+            <small>{s.status}</small>
+          </button>
+        ))}
+      </div>
+      {detail && (
+        <div className="session-detail">
+          <div className="session-actions">
+            <strong>{detail.session.name}</strong>
+            {detail.session.status === "PLANNED" && (
+              <button
+                disabled={busy}
+                onClick={() =>
+                  void act(`/api/v1/sessions/${detail.session.id}/open`, {})
+                }
+              >
+                فتح الجلسة
+              </button>
+            )}
+            {detail.session.status === "OPEN" && (
+              <button
+                disabled={busy}
+                onClick={() =>
+                  void act(`/api/v1/sessions/${detail.session.id}/close`, {
+                    row_version: detail.session.row_version,
+                  })
+                }
+              >
+                إغلاق الجلسة
+              </button>
+            )}
+          </div>
+          {detail.session.status !== "PLANNED" && (
+            <form
+              className="roster-grid"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const f = new FormData(e.currentTarget),
+                  records = detail.roster.map((r) => ({
+                    roster_id: r.id,
+                    attendance: {
+                      status: f.get(`a-${r.id}`),
+                      reason: f.get(`reason-${r.id}`) || null,
+                      row_version: r.attendance_row_version,
+                    },
+                    metrics: r.metrics.flatMap((m) => {
+                      const raw = f.get(`m-${r.id}-${m.definition_id}`);
+                      if (raw === "" || raw === null) return [];
+                      return [
+                        {
+                          definition_id: m.definition_id,
+                          value: [
+                            "COUNT",
+                            "PERCENT",
+                            "SCORE",
+                            "DURATION",
+                            "NUMBER",
+                          ].includes(m.value_type)
+                            ? Number(raw)
+                            : m.value_type === "BOOLEAN"
+                              ? raw === "true"
+                              : raw,
+                          row_version: m.row_version,
+                        },
+                      ];
+                    }),
+                  }));
+                void act(
+                  `/api/v1/sessions/${detail.session.id}/records`,
+                  {
+                    occurrence_row_version: detail.session.row_version,
+                    records,
+                  },
+                  "PUT",
+                );
+              }}
+            >
+              {detail.roster.map((r) => (
+                <article key={r.id}>
+                  <h3>{r.display_name}</h3>
+                  <label>
+                    الحضور
+                    <select
+                      name={`a-${r.id}`}
+                      defaultValue={r.attendance_status}
+                    >
+                      <option value="NOT_RECORDED" disabled>
+                        لم يسجل
+                      </option>
+                      <option value="PRESENT">حاضر</option>
+                      <option value="LATE">متأخر</option>
+                      <option value="EXCUSED_ABSENCE">غائب بعذر</option>
+                      <option value="UNEXCUSED_ABSENCE">غائب بلا عذر</option>
+                    </select>
+                  </label>
+                  <label>
+                    سبب الغياب
+                    <input
+                      name={`reason-${r.id}`}
+                      defaultValue={r.reason ?? ""}
+                    />
+                  </label>
+                  {r.metrics.map((m) => (
+                    <label key={m.definition_id}>
+                      {m.name}
+                      {m.required && " *"}
+                      <input
+                        name={`m-${r.id}-${m.definition_id}`}
+                        type={
+                          [
+                            "COUNT",
+                            "PERCENT",
+                            "SCORE",
+                            "DURATION",
+                            "NUMBER",
+                          ].includes(m.value_type)
+                            ? "number"
+                            : "text"
+                        }
+                        defaultValue={
+                          typeof m.value === "string" ||
+                          typeof m.value === "number"
+                            ? m.value
+                            : ""
+                        }
+                      />
+                    </label>
+                  ))}
+                </article>
+              ))}
+              <button disabled={busy}>حفظ السجل</button>
+            </form>
+          )}
+        </div>
+      )}
+    </section>
   );
 }

@@ -195,6 +195,46 @@ label {
   gap: 1rem;
   margin-bottom: 1rem;
 }
+.session-tabs {
+  display: flex;
+  gap: 0.6rem;
+  overflow: auto;
+  padding: 1rem 0;
+}
+.session-tabs button {
+  white-space: nowrap;
+}
+.session-tabs small {
+  display: block;
+  color: var(--muted);
+}
+.session-detail {
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+.session-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.roster-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.roster-grid article {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1rem;
+}
+.roster-grid h3 {
+  margin-top: 0;
+}
+.secondary {
+  background: #e4eee9;
+  color: var(--green);
+}
 .stats article {
   display: grid;
   gap: 0.25rem;
@@ -282,6 +322,9 @@ label {
   padding: 2rem;
 }
 @media (max-width: 800px) {
+  .roster-grid {
+    grid-template-columns: 1fr;
+  }
   .login-page {
     grid-template-columns: 1fr;
   }

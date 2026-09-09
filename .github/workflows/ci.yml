@@ -1,4 +1,4 @@
-name: P1 program distribution
+name: P2 educational sessions
 on: [push, pull_request]
 permissions:
   contents: read
@@ -19,4 +19,4 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run smoke
-  # Real Supabase and hosted acceptance remain separate mandatory P1 gates.
+  # Real Supabase and hosted acceptance remain separate mandatory P2 gates.

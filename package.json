@@ -25,6 +25,7 @@
     "spike:session": "node --env-file=.env.spike.local scripts/session-spike.ts",
     "acceptance:session": "node --env-file=.env.local scripts/run-session-acceptance.ts",
     "acceptance:p1": "node --env-file=.env.local scripts/run-p1-acceptance.ts",
+    "acceptance:p2": "node --env-file=.env.local scripts/run-p2-acceptance.ts",
     "vercel:configure": "node scripts/configure-vercel.ts"
   },
   "dependencies": {

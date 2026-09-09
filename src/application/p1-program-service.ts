@@ -15,6 +15,40 @@ const week = z
     objectives: z.array(z.string().trim().min(1).max(300)).max(20),
   })
   .strict();
+const sessionMetric = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    value_type: z.enum([
+      "BOOLEAN",
+      "COUNT",
+      "PERCENT",
+      "SCORE",
+      "DURATION",
+      "NUMBER",
+      "ENUM",
+      "SHORT_TEXT",
+    ]),
+    required: z.boolean(),
+    applies_to: z
+      .array(
+        z.enum(["PRESENT", "LATE", "EXCUSED_ABSENCE", "UNEXCUSED_ABSENCE"]),
+      )
+      .min(1),
+    constraints: z.record(z.string(), z.unknown()).default({}),
+  })
+  .strict();
+const sessionDefinition = z
+  .object({
+    week_number: z.number().int().positive(),
+    name: shortText,
+    session_type: z.string().trim().min(1).max(80),
+    day_offset: z.number().int().min(0).max(6),
+    starts_at: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    duration_minutes: z.number().int().min(5).max(720),
+    attendance_required: z.boolean(),
+    metrics: z.array(sessionMetric).max(30),
+  })
+  .strict();
 
 function responsible(actor: RequestActor) {
   if (actor.role !== "RESPONSIBLE") throw new AppError("FORBIDDEN");
@@ -27,17 +61,17 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   if (!result.success) throw new AppError("VALIDATION_ERROR");
   return result.data;
 }
-async function atStage<T>(name: string, work: () => Promise<T>) {
+export async function atStage<T>(name: string, work: () => Promise<T>) {
   try {
     return await work();
   } catch (error) {
-    if (typeof error === "object" && error)
+    if (typeof error === "object" && error && !("technicalStage" in error))
       Object.assign(error, { technicalStage: name });
     throw error;
   }
 }
 
-async function idempotent<T extends { id: string }>(input: {
+export async function idempotent<T extends { id: string }>(input: {
   tx: postgres.TransactionSql;
   actor: RequestActor;
   command: string;
@@ -48,7 +82,7 @@ async function idempotent<T extends { id: string }>(input: {
   const requestHash = hash(input.payload);
   const context = await input.tx<{ matches: boolean; allowed: boolean }[]>`
     select app.request_account_id()=${input.actor.accountId}::uuid as matches,
-      app.actor_allows(${input.actor.workspaceId}::uuid,NULL,true) as allowed`;
+      app.actor_allows(${input.actor.workspaceId}::uuid,NULL,false) as allowed`;
   if (!context[0]?.matches || !context[0]?.allowed)
     throw new AppError("UNAUTHENTICATED");
   await atStage(
@@ -80,7 +114,7 @@ async function idempotent<T extends { id: string }>(input: {
   return result;
 }
 
-async function audit(
+export async function audit(
   tx: postgres.TransactionSql,
   actor: RequestActor,
   requestId: string,
@@ -141,13 +175,24 @@ export class P1ProgramService {
     const template = parse(id, templateId);
     const body = parse(
       z
-        .object({ name: shortText, weeks: z.array(week).min(1).max(104) })
+        .object({
+          name: shortText,
+          weeks: z.array(week).min(1).max(104),
+          sessions: z.array(sessionDefinition).max(500).default([]),
+        })
         .strict(),
       value,
     );
     if (
       new Set(body.weeks.map((item) => item.week_number)).size !==
       body.weeks.length
+    )
+      throw new AppError("VALIDATION_ERROR");
+    if (
+      body.sessions.some(
+        (session) =>
+          !body.weeks.some((item) => item.week_number === session.week_number),
+      )
     )
       throw new AppError("VALIDATION_ERROR");
     const stableKey = parse(key, idempotencyKey);
@@ -172,6 +217,17 @@ export class P1ProgramService {
           await this
             .tx`insert into app.plan_weeks(workspace_id,plan_id,week_number,week_type,title,objectives)
             values(${this.actor.workspaceId}::uuid,${planId}::uuid,${item.week_number},${item.week_type},${item.title},${this.tx.json(item.objectives)})`;
+        for (const item of body.sessions) {
+          const definitionId = randomUUID();
+          await this
+            .tx`insert into app.session_definitions(id,workspace_id,plan_week_id,name,session_type,day_offset,starts_at,duration_minutes,attendance_required)
+            select ${definitionId}::uuid,${this.actor.workspaceId}::uuid,pw.id,${item.name},${item.session_type},${item.day_offset},${item.starts_at}::time,${item.duration_minutes},${item.attendance_required}
+            from app.plan_weeks pw where pw.plan_id=${planId}::uuid and pw.week_number=${item.week_number}`;
+          for (const metric of item.metrics)
+            await this
+              .tx`insert into app.session_metric_definitions(workspace_id,session_definition_id,name,value_type,required,applies_to,constraints)
+              values(${this.actor.workspaceId}::uuid,${definitionId}::uuid,${metric.name},${metric.value_type},${metric.required},${this.tx.json(metric.applies_to)},${this.tx.json(metric.constraints as postgres.JSONValue)})`;
+        }
         await this
           .tx`update app.program_plans set status='PUBLISHED' where id=${planId}::uuid`;
         await this
@@ -240,6 +296,30 @@ export class P1ProgramService {
         await this
           .tx`insert into app.plan_weeks(workspace_id,plan_id,week_number,week_type,title,objectives)
           select workspace_id,${planId}::uuid,week_number,week_type,title,objectives from app.plan_weeks where plan_id=${source.id}::uuid order by week_number`;
+        const sourceDefinitions = await this.tx<
+          {
+            id: string;
+            week_number: number;
+            name: string;
+            session_type: string;
+            day_offset: number;
+            starts_at: string;
+            duration_minutes: number;
+            attendance_required: boolean;
+          }[]
+        >`
+          select sd.id,pw.week_number,sd.name,sd.session_type,sd.day_offset,sd.starts_at::text,sd.duration_minutes,sd.attendance_required
+          from app.session_definitions sd join app.plan_weeks pw on pw.id=sd.plan_week_id where pw.plan_id=${source.id}::uuid order by pw.week_number,sd.id`;
+        for (const definition of sourceDefinitions) {
+          const copiedId = randomUUID();
+          await this
+            .tx`insert into app.session_definitions(id,workspace_id,plan_week_id,name,session_type,day_offset,starts_at,duration_minutes,attendance_required)
+            select ${copiedId}::uuid,${this.actor.workspaceId}::uuid,pw.id,${definition.name},${definition.session_type},${definition.day_offset},${definition.starts_at}::time,${definition.duration_minutes},${definition.attendance_required}
+            from app.plan_weeks pw where pw.plan_id=${planId}::uuid and pw.week_number=${definition.week_number}`;
+          await this
+            .tx`insert into app.session_metric_definitions(workspace_id,session_definition_id,name,value_type,required,applies_to,constraints)
+            select workspace_id,${copiedId}::uuid,name,value_type,required,applies_to,constraints from app.session_metric_definitions where session_definition_id=${definition.id}::uuid`;
+        }
         await this
           .tx`update app.program_plans set status='PUBLISHED' where id=${planId}::uuid`;
         await this
@@ -251,6 +331,14 @@ export class P1ProgramService {
             .tx`insert into app.groups(id,workspace_id,cohort_id,name) values(${groupId}::uuid,${this.actor.workspaceId}::uuid,${cohortId}::uuid,${name})`;
           groups.push({ id: groupId, name });
         }
+        await this
+          .tx`insert into app.session_occurrences(workspace_id,session_definition_id,group_id,starts_at,ends_at)
+          select ${this.actor.workspaceId}::uuid,sd.id,g.id,
+            ((c.starts_on + ((pw.week_number-1)*7 + sd.day_offset)) + sd.starts_at) at time zone w.timezone,
+            (((c.starts_on + ((pw.week_number-1)*7 + sd.day_offset)) + sd.starts_at) at time zone w.timezone) + make_interval(mins=>sd.duration_minutes)
+          from app.session_definitions sd join app.plan_weeks pw on pw.id=sd.plan_week_id
+          join app.cohorts c on c.current_plan_id=pw.plan_id join app.groups g on g.cohort_id=c.id join app.workspaces w on w.id=c.workspace_id
+          where c.id=${cohortId}::uuid`;
         await audit(
           this.tx,
           this.actor,

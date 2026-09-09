@@ -33,6 +33,30 @@ beforeAll(async () => {
   await db.exec(
     await readFile("db/migrations/0007_p1_write_policies.sql", "utf8"),
   );
+  await db.exec(
+    await readFile("db/migrations/0008_idempotency_actor_read.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("db/migrations/0009_educational_sessions.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("db/migrations/0010_operational_actor_commands.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("db/migrations/0011_group_person_scope.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("db/migrations/0012_freeze_session_roster.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("db/migrations/0013_session_roster_visibility.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("db/migrations/0014_session_roster_projection.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("db/migrations/0015_session_record_guards.sql", "utf8"),
+  );
   await db.query(
     "insert into app.workspaces(id,name,timezone,week_starts_on) values($1,'one','Africa/Cairo',6),($2,'two','Africa/Cairo',6)",
     [w1, w2],
@@ -294,5 +318,48 @@ describe("local PostgreSQL foundation (not hosted Supabase acceptance)", () => {
         [w1, enrollment, group],
       ),
     ).rejects.toMatchObject({ code: "23514" });
+  });
+
+  it("enforces one generated occurrence per definition and group", async () => {
+    const template = randomUUID(),
+      cohort = randomUUID(),
+      plan = randomUUID(),
+      week = randomUUID(),
+      definition = randomUUID(),
+      group = randomUUID();
+    await db.query(
+      "insert into app.program_templates(id,workspace_id,name,level) values($1,$2,'Session program','L1')",
+      [template, w1],
+    );
+    await db.query(
+      "insert into app.cohorts(id,workspace_id,name,source_template_id,starts_on,ends_on) values($1,$2,'Session cohort',$3,'2026-01-01','2026-12-31')",
+      [cohort, w1, template],
+    );
+    await db.query(
+      "insert into app.program_plans(id,workspace_id,cohort_id,version,name) values($1,$2,$3,1,'Session plan')",
+      [plan, w1, cohort],
+    );
+    await db.query(
+      "insert into app.plan_weeks(id,workspace_id,plan_id,week_number,week_type,title) values($1,$2,$3,1,'STANDARD','Week')",
+      [week, w1, plan],
+    );
+    await db.query(
+      "insert into app.session_definitions(id,workspace_id,plan_week_id,name,session_type,day_offset,starts_at,duration_minutes) values($1,$2,$3,'Meeting','GENERAL',0,'10:00',60)",
+      [definition, w1, week],
+    );
+    await db.query(
+      "insert into app.groups(id,workspace_id,cohort_id,name) values($1,$2,$3,'Session group')",
+      [group, w1, cohort],
+    );
+    await db.query(
+      "insert into app.session_occurrences(workspace_id,session_definition_id,group_id,starts_at,ends_at) values($1,$2,$3,'2026-01-01T08:00:00Z','2026-01-01T09:00:00Z')",
+      [w1, definition, group],
+    );
+    await expect(
+      db.query(
+        "insert into app.session_occurrences(workspace_id,session_definition_id,group_id,starts_at,ends_at) values($1,$2,$3,'2026-01-01T08:00:00Z','2026-01-01T09:00:00Z')",
+        [w1, definition, group],
+      ),
+    ).rejects.toMatchObject({ code: "23505" });
   });
 });
