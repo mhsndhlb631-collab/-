@@ -203,11 +203,12 @@ try {
     "/api/v1/me/program",
     "/api/v1/me/progress",
   ];
-  for (let round = 0; round < 5; round++) {
+  for (let round = 0; round < 15; round++) {
     const measured = await Promise.all(
-      sessions.flatMap((session) =>
-        paths.map((path) => timedRead(path, session.cookie, session.role)),
-      ),
+      sessions.map((session, userIndex) => {
+        const path = paths[(round + userIndex) % paths.length];
+        return timedRead(path, session.cookie, session.role);
+      }),
     );
     durations.push(...measured);
   }

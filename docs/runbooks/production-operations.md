@@ -9,6 +9,8 @@
 5. Push the reviewed commit and wait for GitHub Actions and Vercel to succeed.
 6. Verify `/health`, `/ready`, and the affected hosted user journeys. Record the commit and deployment timestamp.
 
+The production function region is London (`lhr1`), colocated with the current Supabase `eu-west-2` database region. Treat a database-region move as an infrastructure change and update `vercel.json` in the same reviewed deployment.
+
 ## Roll back or forward-fix
 
 For code-only failure, use Vercel Instant Rollback to the last known-good deployment, then run health/readiness and the affected journey. For an additive database change, prefer a reviewed forward-fix migration. Never edit an applied migration. Stop before any destructive database reversal and use the recovery procedure.
