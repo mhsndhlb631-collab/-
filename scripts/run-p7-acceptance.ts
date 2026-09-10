@@ -137,12 +137,13 @@ try {
   await db.begin(async (tx) => {
     await tx`insert into app.program_templates(id,workspace_id,name,level,status) values(${template}::uuid,${workspace}::uuid,'P7 template','L1','ACTIVE')`;
     await tx`insert into app.cohorts(id,workspace_id,name,source_template_id,starts_on,ends_on,status) values(${cohort}::uuid,${workspace}::uuid,'P7 cohort',${template}::uuid,current_date-10,current_date+60,'ACTIVE')`;
-    await tx`insert into app.program_plans(id,workspace_id,cohort_id,version,name,status) values(${plan}::uuid,${workspace}::uuid,${cohort}::uuid,1,'P7 plan','PUBLISHED')`;
+    await tx`insert into app.program_plans(id,workspace_id,cohort_id,version,name,status) values(${plan}::uuid,${workspace}::uuid,${cohort}::uuid,1,'P7 plan','DRAFT')`;
     await tx`insert into app.plan_weeks(id,workspace_id,plan_id,week_number,week_type,title) values(${week}::uuid,${workspace}::uuid,${plan}::uuid,1,'STANDARD','P7 week')`;
     await tx`insert into app.groups(id,workspace_id,cohort_id,name) values(${group}::uuid,${workspace}::uuid,${cohort}::uuid,'P7 group')`;
     await tx`insert into app.enrollments(id,workspace_id,student_profile_id,cohort_id,effective_from) values(${enrollment}::uuid,${workspace}::uuid,${profile}::uuid,${cohort}::uuid,clock_timestamp()-interval '10 days')`;
     await tx`insert into app.group_memberships(workspace_id,enrollment_id,group_id,effective_from) values(${workspace}::uuid,${enrollment}::uuid,${group}::uuid,clock_timestamp()-interval '10 days')`;
     await tx`insert into app.mentor_assignments(workspace_id,group_id,mentor_person_id,effective_from) values(${workspace}::uuid,${group}::uuid,${people[1]}::uuid,clock_timestamp()-interval '10 days')`;
+    await tx`update app.program_plans set status='PUBLISHED' where id=${plan}::uuid`;
     await tx`update app.cohorts set current_plan_id=${plan}::uuid where id=${cohort}::uuid`;
   });
   stage = "identity_and_role_journeys";

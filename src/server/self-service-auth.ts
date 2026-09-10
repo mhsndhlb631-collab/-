@@ -65,13 +65,24 @@ export async function changeOwnPassword(
   });
   if (signed.error || !signed.data.session)
     throw new AppError("INVALID_CREDENTIALS");
+  const freshClaims = await verifier.auth.getClaims(
+      signed.data.session.access_token,
+    ),
+    completionUserId = freshClaims.data?.claims?.sub,
+    completionSessionId = freshClaims.data?.claims?.session_id;
+  if (
+    freshClaims.error ||
+    typeof completionUserId !== "string" ||
+    typeof completionSessionId !== "string"
+  )
+    throw new AppError("UNAUTHENTICATED");
   const updated = await verifier.auth.updateUser({
     password: parsed.data.new_password,
   });
   if (updated.error) throw new AppError("VALIDATION_ERROR");
   await limited(
     (tx) =>
-      tx`select app.complete_own_password_change(${accountId}::uuid,${sessionId}::uuid,${userId}::uuid,${requestId}::uuid)`,
+      tx`select app.complete_own_password_change(${accountId}::uuid,${completionSessionId}::uuid,${completionUserId}::uuid,${requestId}::uuid)`,
   );
   return { next: "LOGIN" as const };
 }
