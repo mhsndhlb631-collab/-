@@ -102,7 +102,7 @@ async function timedRead(path: string, cookie: string, expectedRole: string) {
     response.status === 200 && body.role === expectedRole,
     "load request failed",
   );
-  return duration;
+  return { path, duration };
 }
 
 try {
@@ -197,7 +197,7 @@ try {
   );
 
   stage = "reference_load";
-  const durations: number[] = [];
+  const durations: { path: string; duration: number }[] = [];
   const paths = [
     "/api/v1/me/today",
     "/api/v1/me/program",
@@ -211,11 +211,20 @@ try {
     );
     durations.push(...measured);
   }
+  const allDurations = durations.map((item) => item.duration);
   report.measurements.requests = durations.length;
-  report.measurements.p50_ms = Math.round(percentile(durations, 0.5) * 10) / 10;
+  report.measurements.p50_ms =
+    Math.round(percentile(allDurations, 0.5) * 10) / 10;
   report.measurements.p95_ms =
-    Math.round(percentile(durations, 0.95) * 10) / 10;
-  report.measurements.max_ms = Math.round(Math.max(...durations) * 10) / 10;
+    Math.round(percentile(allDurations, 0.95) * 10) / 10;
+  report.measurements.max_ms = Math.round(Math.max(...allDurations) * 10) / 10;
+  for (const path of paths) {
+    const pathDurations = durations
+      .filter((item) => item.path === path)
+      .map((item) => item.duration);
+    report.measurements[`p95_${path.split("/").at(-1)}_ms`] =
+      Math.round(percentile(pathDurations, 0.95) * 10) / 10;
+  }
   prove(durations.length === 300);
   prove(
     report.measurements.p95_ms < 1000,

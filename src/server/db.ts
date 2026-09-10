@@ -8,7 +8,9 @@ let client: ReturnType<typeof postgres> | undefined;
 export function runtimeSql() {
   client ??= postgres(databaseUrl(process.env), {
     prepare: false,
-    max: 3,
+    // Bound serverless fan-out while allowing the 20-user reference workload
+    // to avoid queueing behind three long-lived pooled sessions.
+    max: 10,
     connect_timeout: 5,
     idle_timeout: 20,
   });

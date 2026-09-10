@@ -23,98 +23,74 @@ export class P7JourneyService {
   }
 
   async today() {
-    const [sessions, tracking, assignments, attentions, actions] =
-      await Promise.all([
-        this.tx<
-          { count: number }[]
-        >`select count(*)::int count from app.session_occurrences
-          where starts_at::date=(clock_timestamp() at time zone 'Africa/Cairo')::date and status<>'CANCELLED'`,
-        this.tx<
-          { count: number }[]
-        >`select count(*)::int count from app.tracking_entries
-          where period_start<=(clock_timestamp() at time zone 'Africa/Cairo')::date
-            and period_end>=(clock_timestamp() at time zone 'Africa/Cairo')::date`,
-        this.tx<
-          { count: number }[]
-        >`select count(*)::int count from app.assignment_definitions ad
-          join app.plan_weeks pw on pw.id=ad.plan_week_id
-          join app.program_plans pp on pp.id=pw.plan_id
-          where pp.status='PUBLISHED'`,
-        this.tx<
-          { count: number }[]
-        >`select count(*)::int count from app.attentions where status in ('OPEN','IN_PROGRESS','SNOOZED')`,
-        this.tx<
-          { count: number }[]
-        >`select count(*)::int count from app.actions where status in ('OPEN','IN_PROGRESS','DONE_PENDING_VERIFICATION')`,
-      ]);
+    const rows = await this.tx<
+      {
+        sessions: number;
+        tracking: number;
+        assignments: number;
+        attentions: number;
+        actions: number;
+      }[]
+    >`select
+      (select count(*)::int from app.session_occurrences where starts_at::date=(clock_timestamp() at time zone 'Africa/Cairo')::date and status<>'CANCELLED') sessions,
+      (select count(*)::int from app.tracking_entries where period_start<=(clock_timestamp() at time zone 'Africa/Cairo')::date and period_end>=(clock_timestamp() at time zone 'Africa/Cairo')::date) tracking,
+      (select count(*)::int from app.assignment_definitions ad join app.plan_weeks pw on pw.id=ad.plan_week_id join app.program_plans pp on pp.id=pw.plan_id where pp.status='PUBLISHED') assignments,
+      (select count(*)::int from app.attentions where status in ('OPEN','IN_PROGRESS','SNOOZED')) attentions,
+      (select count(*)::int from app.actions where status in ('OPEN','IN_PROGRESS','DONE_PENDING_VERIFICATION')) actions`;
+    const counts = rows[0];
     return {
       role: this.actor.role,
       date: new Date().toISOString().slice(0, 10),
       counts: {
-        sessions: sessions[0]?.count ?? 0,
-        tracking: tracking[0]?.count ?? 0,
-        assignments: assignments[0]?.count ?? 0,
+        sessions: counts?.sessions ?? 0,
+        tracking: counts?.tracking ?? 0,
+        assignments: counts?.assignments ?? 0,
         attentions:
-          this.actor.role === "STUDENT"
-            ? undefined
-            : (attentions[0]?.count ?? 0),
+          this.actor.role === "STUDENT" ? undefined : (counts?.attentions ?? 0),
         actions:
-          this.actor.role === "STUDENT" ? undefined : (actions[0]?.count ?? 0),
+          this.actor.role === "STUDENT" ? undefined : (counts?.actions ?? 0),
       },
     };
   }
 
   async program() {
-    const [cohorts, groups, weeks] = await Promise.all([
-      this.tx<
-        { id: string; name: string; status: string }[]
-      >`select distinct c.id,c.name,c.status from app.cohorts c order by c.name,c.id`,
-      this.tx<
-        { id: string; name: string; cohort_name: string }[]
-      >`select distinct g.id,g.name,c.name cohort_name from app.groups g join app.cohorts c on c.id=g.cohort_id order by c.name,g.name,g.id`,
-      this.tx<
-        { id: string; week_number: number; title: string }[]
-      >`select distinct pw.id,pw.week_number,pw.title from app.plan_weeks pw join app.program_plans pp on pp.id=pw.plan_id where pp.status='PUBLISHED' order by pw.week_number,pw.id`,
-    ]);
-    return { role: this.actor.role, cohorts, groups, weeks };
+    const rows = await this.tx<
+      { cohorts: unknown[]; groups: unknown[]; weeks: unknown[] }[]
+    >`select
+      coalesce((select jsonb_agg(to_jsonb(c) order by c.name,c.id) from (select distinct c.id,c.name,c.status from app.cohorts c) c),'[]'::jsonb) cohorts,
+      coalesce((select jsonb_agg(to_jsonb(g) order by g.cohort_name,g.name,g.id) from (select distinct g.id,g.name,c.name cohort_name from app.groups g join app.cohorts c on c.id=g.cohort_id) g),'[]'::jsonb) groups,
+      coalesce((select jsonb_agg(to_jsonb(w) order by w.week_number,w.id) from (select distinct pw.id,pw.week_number,pw.title from app.plan_weeks pw join app.program_plans pp on pp.id=pw.plan_id where pp.status='PUBLISHED') w),'[]'::jsonb) weeks`;
+    return { role: this.actor.role, ...(rows[0] ?? {}) };
   }
 
   async progress() {
     if (this.actor.role === "STUDENT") {
-      const [tracking, weeks, exams] = await Promise.all([
-        this.tx<
-          { recorded: number }[]
-        >`select count(*)::int recorded from app.tracking_entries`,
-        this.tx<
-          { coverage: number; score: number | null; status: string }[]
-        >`select coverage::float8 coverage,score::float8 score,status from app.student_week_summaries order by updated_at desc,id limit 12`,
-        this.tx<
-          { published: number }[]
-        >`select count(*)::int published from app.exam_results where status='PUBLISHED'`,
-      ]);
+      const rows = await this.tx<
+        { recorded: number; published: number; weeks: unknown[] }[]
+      >`select
+        (select count(*)::int from app.tracking_entries) recorded,
+        (select count(*)::int from app.exam_results where status='PUBLISHED') published,
+        coalesce((select jsonb_agg(jsonb_build_object('coverage',w.coverage,'score',w.score,'status',w.status) order by w.updated_at desc,w.id) from (select id,coverage::float8 coverage,score::float8 score,status,updated_at from app.student_week_summaries order by updated_at desc,id limit 12) w),'[]'::jsonb) weeks`;
+      const row = rows[0];
       return {
         role: this.actor.role,
-        tracking_recorded: tracking[0]?.recorded ?? 0,
-        published_exams: exams[0]?.published ?? 0,
-        weeks,
+        tracking_recorded: row?.recorded ?? 0,
+        published_exams: row?.published ?? 0,
+        weeks: row?.weeks ?? [],
       };
     }
-    const [closed, openActions, reviewed] = await Promise.all([
-      this.tx<
-        { count: number }[]
-      >`select count(*)::int count from app.session_occurrences where status='CLOSED'`,
-      this.tx<
-        { count: number }[]
-      >`select count(*)::int count from app.actions where status in ('OPEN','IN_PROGRESS','DONE_PENDING_VERIFICATION')`,
-      this.tx<
-        { count: number }[]
-      >`select count(*)::int count from app.tracking_reviews`,
-    ]);
+    const rows = await this.tx<
+      { closed: number; open_actions: number; reviewed: number }[]
+    >`select
+      (select count(*)::int from app.session_occurrences where status='CLOSED') closed,
+      (select count(*)::int from app.actions where status in ('OPEN','IN_PROGRESS','DONE_PENDING_VERIFICATION')) open_actions,
+      (select count(*)::int from app.tracking_reviews) reviewed`;
+    const row = rows[0];
     return {
       role: this.actor.role,
-      sessions_closed: closed[0]?.count ?? 0,
-      actions_open: openActions[0]?.count ?? 0,
-      entries_reviewed: reviewed[0]?.count ?? 0,
+      sessions_closed: row?.closed ?? 0,
+      actions_open: row?.open_actions ?? 0,
+      entries_reviewed: row?.reviewed ?? 0,
     };
   }
 }
