@@ -35,13 +35,13 @@ export class P5FollowupService {
     operate(this.actor);
     const [attentions, actions, followups, cases] = await Promise.all([
       this
-        .tx`select a.id,a.enrollment_id,a.rule_code,a.evidence,a.status,a.owner_account_id,a.original_due_at,a.due_at,a.snoozed_until,a.resolution_reason,a.row_version,p.display_name student_name from app.attentions a join app.enrollments e on e.id=a.enrollment_id join app.student_profiles sp on sp.id=e.student_profile_id join app.persons p on p.id=sp.person_id order by case a.status when 'OPEN' then 0 when 'IN_PROGRESS' then 1 when 'SNOOZED' then 2 else 3 end,a.due_at,a.id`,
+        .tx`select a.id,a.enrollment_id,a.rule_code,a.evidence,a.status,a.owner_account_id,a.original_due_at,a.due_at,a.snoozed_until,a.resolution_reason,a.row_version::int row_version,p.display_name student_name from app.attentions a join app.enrollments e on e.id=a.enrollment_id join app.student_profiles sp on sp.id=e.student_profile_id join app.persons p on p.id=sp.person_id order by case a.status when 'OPEN' then 0 when 'IN_PROGRESS' then 1 when 'SNOOZED' then 2 else 3 end,a.due_at,a.id`,
       this
-        .tx`select id,enrollment_id,attention_id,case_id,owner_account_id,title,status,original_due_at,due_at,completion_note,verification_note,row_version from app.actions order by due_at,id`,
+        .tx`select id,enrollment_id,attention_id,case_id,owner_account_id,title,status,original_due_at,due_at,completion_note,verification_note,row_version::int row_version from app.actions order by due_at,id`,
       this
-        .tx`select id,enrollment_id,performed_by_account_id,occurred_at,channel,outcome,qualifies,action_id,case_id,current_version,cancelled_at,row_version from app.followups order by occurred_at desc,id`,
+        .tx`select id,enrollment_id,performed_by_account_id,occurred_at,channel,outcome,qualifies,action_id,case_id,current_version,cancelled_at,row_version::int row_version from app.followups order by occurred_at desc,id`,
       this
-        .tx`select id,enrollment_id,title,problem,priority,status,owner_account_id,resolution_summary,opened_at,resolved_at,row_version from app.cases order by case priority when 'CRITICAL' then 0 when 'HIGH' then 1 when 'MEDIUM' then 2 else 3 end,opened_at desc,id`,
+        .tx`select id,enrollment_id,title,problem,priority,status,owner_account_id,resolution_summary,opened_at,resolved_at,row_version::int row_version from app.cases order by case priority when 'CRITICAL' then 0 when 'HIGH' then 1 when 'MEDIUM' then 2 else 3 end,opened_at desc,id`,
     ]);
     return {
       actor_role: this.actor.role,
@@ -119,7 +119,7 @@ export class P5FollowupService {
             order by ma.effective_from desc,a.id limit 1`;
           const rows = await this
             .tx`insert into app.attentions(id,workspace_id,enrollment_id,rule_code,evidence_key,evidence,owner_account_id,original_due_at,due_at)
-          values(${attentionId}::uuid,${this.actor.workspaceId}::uuid,${item.enrollment_id}::uuid,${item.rule_code},${item.evidence_key},${this.tx.json(item.evidence)},${owners[0]?.id ?? this.actor.accountId}::uuid,${item.due_at},${item.due_at}) on conflict do nothing returning id`;
+          values(${attentionId}::uuid,${this.actor.workspaceId}::uuid,${item.enrollment_id}::uuid,${item.rule_code},${item.evidence_key},${this.tx.json(item.evidence)},${owners[0]?.id ?? null}::uuid,${item.due_at},${item.due_at}) on conflict do nothing returning id`;
           if (rows[0]) {
             created++;
             await audit(
@@ -273,7 +273,7 @@ export class P5FollowupService {
     operate(this.actor);
     const student = parse(id, studentValue);
     return this
-      .tx`select f.id,f.enrollment_id,f.performed_by_account_id,f.occurred_at,f.channel,f.outcome,f.qualifies,f.action_id,f.case_id,f.current_version,f.cancelled_at,f.row_version
+      .tx`select f.id,f.enrollment_id,f.performed_by_account_id,f.occurred_at,f.channel,f.outcome,f.qualifies,f.action_id,f.case_id,f.current_version,f.cancelled_at,f.row_version::int row_version
       from app.followups f join app.enrollments e on e.id=f.enrollment_id
       where e.student_profile_id=${student}::uuid order by f.occurred_at desc,f.id`;
   }
@@ -282,13 +282,13 @@ export class P5FollowupService {
     operate(this.actor);
     const caseId = parse(id, caseValue);
     const cases = await this
-      .tx`select id,enrollment_id,title,problem,priority,status,owner_account_id,resolution_summary,opened_at,resolved_at,row_version from app.cases where id=${caseId}::uuid`;
+      .tx`select id,enrollment_id,title,problem,priority,status,owner_account_id,resolution_summary,opened_at,resolved_at,row_version::int row_version from app.cases where id=${caseId}::uuid`;
     if (!cases[0]) throw new AppError("NOT_FOUND");
     const [actions, followups, events] = await Promise.all([
       this
-        .tx`select id,enrollment_id,attention_id,case_id,owner_account_id,title,status,original_due_at,due_at,completion_note,verification_note,row_version from app.actions where case_id=${caseId}::uuid order by due_at,id`,
+        .tx`select id,enrollment_id,attention_id,case_id,owner_account_id,title,status,original_due_at,due_at,completion_note,verification_note,row_version::int row_version from app.actions where case_id=${caseId}::uuid order by due_at,id`,
       this
-        .tx`select id,enrollment_id,performed_by_account_id,occurred_at,channel,outcome,qualifies,action_id,case_id,current_version,cancelled_at,row_version from app.followups where case_id=${caseId}::uuid order by occurred_at desc,id`,
+        .tx`select id,enrollment_id,performed_by_account_id,occurred_at,channel,outcome,qualifies,action_id,case_id,current_version,cancelled_at,row_version::int row_version from app.followups where case_id=${caseId}::uuid order by occurred_at desc,id`,
       this
         .tx`select id,event_type,note,actor_account_id,occurred_at from app.case_events where case_id=${caseId}::uuid order by occurred_at,id`,
     ]);

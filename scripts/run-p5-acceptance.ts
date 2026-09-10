@@ -55,6 +55,8 @@ const workspace = randomUUID(),
   enrollment = randomUUID(),
   evidence: Record<string, boolean> = {};
 let stage = "bootstrap";
+let lastHttp: { status: number; code?: string; request_id?: string } | null =
+  null;
 function prove(value: unknown): asserts value {
   if (!value) throw new Error(`acceptance assertion failed: ${stage}`);
 }
@@ -62,6 +64,7 @@ async function createIdentity(
   i: number,
   role: "RESPONSIBLE" | "MENTOR" | "STUDENT",
 ) {
+  stage = `identity_${role.toLowerCase()}_${i}`;
   const created = await admin.auth.admin.createUser({
     email: `${accounts[i]}@${env.AUTH_INTERNAL_EMAIL_DOMAIN}`,
     password,
@@ -99,10 +102,22 @@ async function request(
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  return { status: response.status, result: await response.json() };
+  const result = await response.json();
+  lastHttp = {
+    status: response.status,
+    code:
+      result && typeof result === "object" && "code" in result
+        ? String(result.code)
+        : undefined,
+    request_id:
+      result && typeof result === "object" && "request_id" in result
+        ? String(result.request_id)
+        : undefined,
+  };
+  return { status: response.status, result };
 }
 try {
-  stage = "fixtures";
+  stage = "fixtures_workspace";
   await db.begin(async (tx) => {
     await tx`insert into app.workspaces(id,name,timezone,week_starts_on) values(${workspace}::uuid,'P5 acceptance','Africa/Cairo',6),(${outsiderWorkspace}::uuid,'P5 isolated','Africa/Cairo',6)`;
     for (let i = 0; i < 4; i++)
@@ -113,17 +128,25 @@ try {
   await createIdentity(1, "MENTOR");
   await createIdentity(2, "STUDENT");
   await createIdentity(3, "MENTOR");
+  stage = "fixtures_program_and_signals";
   await db.begin(async (tx) => {
+    stage = "fixtures_template";
     await tx`insert into app.program_templates(id,workspace_id,name,level,status) values(${template}::uuid,${workspace}::uuid,'P5 template','L1','ACTIVE')`;
-    await tx`insert into app.cohorts(id,workspace_id,name,source_template_id,starts_on,ends_on,status) values(${cohort}::uuid,${workspace}::uuid,'P5 cohort',${template}::uuid,current_date-30,current_date+30,'ACTIVE')`;
-    await tx`insert into app.program_plans(id,workspace_id,cohort_id,version,name,status) values(${plan}::uuid,${workspace}::uuid,${cohort}::uuid,1,'P5 plan','PUBLISHED')`;
-    await tx`update app.cohorts set current_plan_id=${plan}::uuid where id=${cohort}::uuid`;
+    stage = "fixtures_cohort";
+    await tx`insert into app.cohorts(id,workspace_id,name,source_template_id,starts_on,ends_on,status) values(${cohort}::uuid,${workspace}::uuid,'P5 cohort',${template}::uuid,current_date-10,current_date+30,'ACTIVE')`;
+    stage = "fixtures_plan";
+    await tx`insert into app.program_plans(id,workspace_id,cohort_id,version,name,status) values(${plan}::uuid,${workspace}::uuid,${cohort}::uuid,1,'P5 plan','DRAFT')`;
+    stage = "fixtures_week";
     await tx`insert into app.plan_weeks(id,workspace_id,plan_id,week_number,week_type,title) values(${week}::uuid,${workspace}::uuid,${plan}::uuid,1,'STANDARD','P5 week')`;
+    stage = "fixtures_group";
     await tx`insert into app.groups(id,workspace_id,cohort_id,name) values(${group}::uuid,${workspace}::uuid,${cohort}::uuid,'P5 group')`;
+    stage = "fixtures_enrollment";
     await tx`insert into app.enrollments(id,workspace_id,student_profile_id,cohort_id,effective_from) values(${enrollment}::uuid,${workspace}::uuid,${profile}::uuid,${cohort}::uuid,clock_timestamp()-interval '20 days')`;
+    stage = "fixtures_scope";
     await tx`insert into app.group_memberships(workspace_id,enrollment_id,group_id,effective_from) values(${workspace}::uuid,${enrollment}::uuid,${group}::uuid,clock_timestamp()-interval '20 days')`;
     await tx`insert into app.mentor_assignments(workspace_id,group_id,mentor_person_id,effective_from) values(${workspace}::uuid,${group}::uuid,${people[1]}::uuid,clock_timestamp()-interval '20 days')`;
     for (let i = 0; i < 2; i++) {
+      stage = `fixtures_session_${i}`;
       const definition = randomUUID(),
         occurrence = randomUUID(),
         roster = randomUUID();
@@ -132,8 +155,14 @@ try {
       await tx`insert into app.session_roster(id,workspace_id,session_occurrence_id,enrollment_id) values(${roster}::uuid,${workspace}::uuid,${occurrence}::uuid,${enrollment}::uuid)`;
       await tx`insert into app.attendance(workspace_id,roster_id,status,reason) values(${workspace}::uuid,${roster}::uuid,'UNEXCUSED_ABSENCE','غياب دون عذر')`;
     }
+    stage = "fixtures_exam";
     await tx`insert into app.exam_definitions(workspace_id,plan_week_id,title,day_offset,max_score) values(${workspace}::uuid,${week}::uuid,'P5 overdue exam',0,20)`;
+    stage = "fixtures_assignment";
     await tx`insert into app.assignment_definitions(workspace_id,plan_week_id,title,instructions,due_day_offset,max_score) values(${workspace}::uuid,${week}::uuid,'P5 overdue review','أرسل التكليف للمراجعة',0,20)`;
+    stage = "fixtures_publish_plan";
+    await tx`update app.program_plans set status='PUBLISHED' where id=${plan}::uuid`;
+    stage = "fixtures_current_plan";
+    await tx`update app.cohorts set current_plan_id=${plan}::uuid where id=${cohort}::uuid`;
   });
   const mentor = await login(1),
     student = await login(2),
@@ -178,7 +207,7 @@ try {
     (item: { rule_code: string }) =>
       item.rule_code === "NO_QUALIFIED_FOLLOWUP_14D",
   );
-  stage = "attention_lifecycle";
+  stage = "attention_claim";
   response = await request(
     mentor,
     `/api/v1/attention/${first.id}/claim`,
@@ -186,6 +215,7 @@ try {
     { row_version: first.row_version },
   );
   prove(response.status === 200 && response.result.status === "IN_PROGRESS");
+  stage = "attention_snooze";
   response = await request(
     mentor,
     `/api/v1/attention/${first.id}/snooze`,
@@ -196,12 +226,16 @@ try {
     },
   );
   prove(response.status === 200 && response.result.status === "SNOOZED");
+  stage = "attention_reclaim";
   response = await request(
     mentor,
     `/api/v1/attention/${first.id}/claim`,
     "POST",
     { row_version: response.result.row_version },
   );
+  prove(response.status === 200 && response.result.status === "IN_PROGRESS");
+  const resolvingRowVersion = response.result.row_version;
+  stage = "attention_cause_removal_followup";
   response = await request(
     mentor,
     `/api/v1/students/${profile}/followups`,
@@ -218,12 +252,13 @@ try {
   );
   prove(response.status === 200);
   const followupId = response.result.id;
+  stage = "attention_resolve_after_cause_removed";
   response = await request(
     mentor,
     `/api/v1/attention/${first.id}/resolve`,
     "POST",
     {
-      row_version: response.result.row_version,
+      row_version: resolvingRowVersion,
       reason: "زوال سبب التنبيه بعد التحقق",
     },
   );
@@ -231,6 +266,7 @@ try {
   const second = list.result.attentions.find(
     (item: { id: string }) => item.id !== first.id,
   );
+  stage = "attention_dismiss_override";
   response = await request(
     mentor,
     `/api/v1/attention/${second.id}/dismiss`,
@@ -340,11 +376,27 @@ try {
   console.log(
     "PASS: hosted P5 attention, actions, followups, cases, verification, privacy and cleanup completed.",
   );
-} catch {
+} catch (error) {
+  const diagnostic =
+    error && typeof error === "object"
+      ? {
+          name: "name" in error ? String(error.name) : undefined,
+          code: "code" in error ? String(error.code) : undefined,
+          table: "table_name" in error ? String(error.table_name) : undefined,
+          constraint:
+            "constraint_name" in error
+              ? String(error.constraint_name)
+              : undefined,
+        }
+      : {};
   await mkdir("output/p5", { recursive: true });
   await writeFile(
     "output/p5/acceptance.json",
-    JSON.stringify({ result: "FAIL", stage, evidence }, null, 2),
+    JSON.stringify(
+      { result: "FAIL", stage, evidence, diagnostic, http: lastHttp },
+      null,
+      2,
+    ),
   );
   console.error(`P5 acceptance failed at ${stage}.`);
   process.exitCode = 1;
@@ -354,18 +406,22 @@ try {
       await tx`alter table app.followup_revisions disable trigger followup_revision_immutable`;
       await tx`alter table app.case_events disable trigger case_event_immutable`;
       await tx`alter table app.audit_events disable trigger audit_immutable`;
+      await tx`alter table app.plan_weeks disable trigger week_requires_draft_plan`;
+      await tx`alter table app.program_plans disable trigger plan_immutable`;
       await tx`delete from app.case_events where workspace_id=${workspace}::uuid`;
       await tx`delete from app.followup_revisions where workspace_id=${workspace}::uuid`;
       await tx`delete from app.followups where workspace_id=${workspace}::uuid`;
       await tx`delete from app.actions where workspace_id=${workspace}::uuid`;
       await tx`delete from app.attentions where workspace_id=${workspace}::uuid`;
       await tx`delete from app.cases where workspace_id=${workspace}::uuid`;
+      await tx`delete from app.idempotency_records where workspace_id=${workspace}::uuid`;
       await tx`delete from app.audit_events where workspace_id in (${workspace}::uuid,${outsiderWorkspace}::uuid)`;
       await tx`delete from app.attendance where workspace_id=${workspace}::uuid`;
       await tx`delete from app.session_roster where workspace_id=${workspace}::uuid`;
       await tx`delete from app.session_occurrences where workspace_id=${workspace}::uuid`;
       await tx`delete from app.session_definitions where workspace_id=${workspace}::uuid`;
       await tx`delete from app.exam_definitions where workspace_id=${workspace}::uuid`;
+      await tx`delete from app.assignment_definitions where workspace_id=${workspace}::uuid`;
       await tx`delete from app.group_memberships where workspace_id=${workspace}::uuid`;
       await tx`delete from app.mentor_assignments where workspace_id=${workspace}::uuid`;
       await tx`delete from app.enrollments where workspace_id=${workspace}::uuid`;
@@ -382,6 +438,8 @@ try {
       await tx`alter table app.followup_revisions enable trigger followup_revision_immutable`;
       await tx`alter table app.case_events enable trigger case_event_immutable`;
       await tx`alter table app.audit_events enable trigger audit_immutable`;
+      await tx`alter table app.plan_weeks enable trigger week_requires_draft_plan`;
+      await tx`alter table app.program_plans enable trigger plan_immutable`;
     });
     for (const authId of authIds) await admin.auth.admin.deleteUser(authId);
   } catch {
