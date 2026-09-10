@@ -645,7 +645,11 @@ export class P5FollowupService {
               ? "ASSIGNED"
               : operation === "escalate"
                 ? "ESCALATED"
-                : operation.toUpperCase();
+                : operation === "resolve"
+                  ? "RESOLVED"
+                  : operation === "reopen"
+                    ? "REOPENED"
+                    : "ARCHIVED";
         await this
           .tx`insert into app.case_events(workspace_id,case_id,event_type,note,actor_account_id,request_id) values(${this.actor.workspaceId}::uuid,${target}::uuid,${event},${body.note},${this.actor.accountId}::uuid,${this.requestId}::uuid)`;
         await audit(

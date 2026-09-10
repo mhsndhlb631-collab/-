@@ -340,13 +340,14 @@ try {
     await db`select count(*) count from app.followup_revisions where followup_id=${followupId}::uuid`;
   prove(Number(revisions[0].count) === 1);
   evidence.followup_immutable_correction = true;
-  stage = "case_resolution";
+  stage = "case_escalation";
   response = await request(mentor, `/api/v1/cases/${caseId}/escalate`, "POST", {
     row_version: 1,
     note: "تصعيد للمتابعة المكثفة",
     priority: "CRITICAL",
   });
   prove(response.status === 200);
+  stage = "case_resolution";
   response = await request(mentor, `/api/v1/cases/${caseId}/resolve`, "POST", {
     row_version: 2,
     note: "تحققت النتيجة عبر الإجراء والمتابعة",
