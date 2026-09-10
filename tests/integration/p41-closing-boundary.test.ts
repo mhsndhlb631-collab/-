@@ -36,6 +36,8 @@ const ALL_MIGRATIONS = [
   "0025_finalize_transitions.sql",
   "0026_p5_followup_foundation.sql",
   "0027_p5_security.sql",
+  "0028_p6_reporting_foundation.sql",
+  "0029_p6_reporting_security.sql",
 ];
 beforeAll(async () => {
   db = new PGlite();
@@ -98,6 +100,30 @@ describe("P5 database contracts", () => {
     expect(result.rows.map((row) => row.tgname)).toEqual([
       "case_event_immutable",
       "followup_revision_immutable",
+    ]);
+  });
+});
+
+describe("P6 database contracts", () => {
+  it("forces RLS on performance snapshots and export history", async () => {
+    const result = await db.query<{
+      relname: string;
+      relforcerowsecurity: boolean;
+    }>(
+      `select relname,relforcerowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace
+       where n.nspname='app' and relname in ('mentor_performance_snapshots','report_exports') order by relname`,
+    );
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows.every((row) => row.relforcerowsecurity)).toBe(true);
+  });
+
+  it("makes snapshots and export history immutable", async () => {
+    const result = await db.query<{ tgname: string }>(
+      `select tgname from pg_trigger where not tgisinternal and tgname in ('mentor_performance_snapshot_immutable','report_export_immutable') order by tgname`,
+    );
+    expect(result.rows.map((row) => row.tgname)).toEqual([
+      "mentor_performance_snapshot_immutable",
+      "report_export_immutable",
     ]);
   });
 });

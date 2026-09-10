@@ -48,8 +48,8 @@ describe("migration discovery (production runner contract)", () => {
       .sort();
     const tail = files.slice(-2);
     expect(tail).toEqual([
-      "0026_p5_followup_foundation.sql",
-      "0027_p5_security.sql",
+      "0028_p6_reporting_foundation.sql",
+      "0029_p6_reporting_security.sql",
     ]);
   });
 });

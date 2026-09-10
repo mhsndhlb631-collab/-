@@ -3,6 +3,7 @@ import { FormEvent, useState } from "react";
 import { TrackingWorkspace } from "./tracking-workspace";
 import { LearningWorkspace } from "./learning-workspace";
 import { FollowupWorkspace } from "./followup-workspace";
+import { ResponsibleCenter } from "./responsible-center";
 
 type Overview = {
   actor_role: "RESPONSIBLE" | "MENTOR" | "STUDENT";
@@ -189,6 +190,7 @@ export function OperationsShell() {
           <span>جلسات</span>
         </article>
       </section>
+      {data.actor_role === "RESPONSIBLE" && <ResponsibleCenter />}
       {data.actor_role === "RESPONSIBLE" && (
         <section className="workspace-grid">
           <TemplateForm busy={busy} submit={command} />
