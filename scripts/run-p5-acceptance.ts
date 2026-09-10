@@ -148,7 +148,7 @@ try {
   prove(response.status === 200 && response.result.created >= 6);
   response = await request(mentor, "/api/v1/attention/evaluate", "POST", {});
   prove(response.status === 200 && response.result.created === 0);
-  let list = await request(mentor, "/api/v1/attention");
+  const list = await request(mentor, "/api/v1/attention");
   const codes = new Set(
     list.result.attentions.map((x: { rule_code: string }) => x.rule_code),
   );
@@ -340,7 +340,7 @@ try {
   console.log(
     "PASS: hosted P5 attention, actions, followups, cases, verification, privacy and cleanup completed.",
   );
-} catch (error) {
+} catch {
   await mkdir("output/p5", { recursive: true });
   await writeFile(
     "output/p5/acceptance.json",

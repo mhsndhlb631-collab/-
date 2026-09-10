@@ -46,7 +46,17 @@ export function FollowupWorkspace({
     }
   }
   useEffect(() => {
-    void load();
+    void Promise.all([
+      fetch("/api/v1/attention", { cache: "no-store" }),
+      fetch("/api/v1/actions", { cache: "no-store" }),
+      fetch("/api/v1/cases", { cache: "no-store" }),
+    ]).then(async (responses) => {
+      if (responses.every((response) => response.ok)) {
+        setAttentions((await responses[0].json()).attentions);
+        setActions((await responses[1].json()).actions);
+        setCases((await responses[2].json()).cases);
+      }
+    });
   }, []);
   async function act(path: string, body: unknown) {
     await command(path, body);
