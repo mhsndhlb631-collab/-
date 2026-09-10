@@ -111,6 +111,7 @@ try {
   await identity(5, "RESPONSIBLE");
   stage = "fixtures_domain";
   await db.begin(async (tx) => {
+    await tx`select set_config('app.account_id',${accounts[1]},true)`;
     await tx`insert into app.program_templates(id,workspace_id,name,level,status) values(${template}::uuid,${workspace}::uuid,'P6 template','L1','ACTIVE')`;
     await tx`insert into app.cohorts(id,workspace_id,name,source_template_id,starts_on,ends_on,status) values(${cohort}::uuid,${workspace}::uuid,'P6 cohort',${template}::uuid,current_date-20,current_date+20,'ACTIVE')`;
     await tx`insert into app.program_plans(id,workspace_id,cohort_id,version,name,status) values(${plan}::uuid,${workspace}::uuid,${cohort}::uuid,1,'P6 plan','DRAFT')`;
@@ -181,7 +182,10 @@ try {
   prove(Object.values(response.result.evidence).flat().length === 8);
   evidence.four_dimensions_weights_and_evidence = true;
   stage = "student_grades_excluded";
-  await db`update app.exam_results set score=99 where workspace_id=${workspace}::uuid`;
+  await db.begin(async (tx) => {
+    await tx`select set_config('app.account_id',${accounts[1]},true),set_config('app.correction_reason','اختبار استبعاد الدرجة',true)`;
+    await tx`update app.exam_results set score=99,current_version=current_version+1 where workspace_id=${workspace}::uuid`;
+  });
   response = await request(
     responsibleCookie,
     `/api/v1/mentors/${accounts[1]}/performance?${range}`,
@@ -327,6 +331,7 @@ try {
       await tx`alter table app.followup_revisions disable trigger followup_revision_immutable`;
       await tx`alter table app.case_events disable trigger case_event_immutable`;
       await tx`alter table app.audit_events disable trigger audit_immutable`;
+      await tx`alter table app.exam_result_revisions disable trigger exam_revision_immutable`;
       await tx`alter table app.plan_weeks disable trigger week_requires_draft_plan`;
       await tx`alter table app.program_plans disable trigger plan_immutable`;
       await tx`delete from app.mentor_performance_snapshots where workspace_id=${workspace}::uuid`;
@@ -366,6 +371,7 @@ try {
       await tx`alter table app.followup_revisions enable trigger followup_revision_immutable`;
       await tx`alter table app.case_events enable trigger case_event_immutable`;
       await tx`alter table app.audit_events enable trigger audit_immutable`;
+      await tx`alter table app.exam_result_revisions enable trigger exam_revision_immutable`;
       await tx`alter table app.plan_weeks enable trigger week_requires_draft_plan`;
       await tx`alter table app.program_plans enable trigger plan_immutable`;
     });

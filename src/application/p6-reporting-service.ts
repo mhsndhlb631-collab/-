@@ -196,7 +196,10 @@ export class P6ReportingService {
       ), followup as (
         select 'followup','attention',at.id,at.created_at+interval '72 hours',exists(
           select 1 from app.followups f where f.enrollment_id=at.enrollment_id and f.qualifies and f.cancelled_at is null
-            and f.occurred_at>=at.created_at and f.occurred_at<=at.created_at+interval '72 hours')
+            and f.occurred_at>=at.created_at and f.occurred_at<=at.created_at+interval '72 hours'
+            and at.id=(select at2.id from app.attentions at2 where at2.enrollment_id=f.enrollment_id and at2.owner_account_id=at.owner_account_id
+              and f.occurred_at>=at2.created_at and f.occurred_at<=at2.created_at+interval '72 hours'
+              order by at2.created_at desc,at2.id desc limit 1))
         from app.attentions at where at.workspace_id=${this.actor.workspaceId}::uuid and at.owner_account_id=${mentor}::uuid
           and at.created_at::date between ${from}::date and ${to}::date
       ), data_slots as (
