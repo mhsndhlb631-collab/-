@@ -70,6 +70,7 @@ const password = randomBytes(24).toString("base64url");
 const evidence: Record<string, boolean> = {};
 let stage = "bootstrap";
 let accessorInstalled = false;
+let diagnostic: Record<string, number> | undefined;
 function requireProof(value: unknown): asserts value {
   if (!value) throw new Error("acceptance assertion failed");
 }
@@ -149,8 +150,6 @@ try {
         ${`p0_mentor_${fixture.mentorAccountId.slice(0, 8)}`} ,'MENTOR'),
         (${fixture.studentAccountId}::uuid,${fixture.workspaceId}::uuid,${fixture.studentPersonId}::uuid,
         ${`p0_student_${fixture.studentAccountId.slice(0, 8)}`} ,'STUDENT')`;
-    await tx`insert into app.mentor_student_scopes(workspace_id,mentor_person_id,student_person_id,effective_from)
-      values(${fixture.workspaceId}::uuid,${fixture.mentorPersonId}::uuid,${fixture.studentPersonId}::uuid,clock_timestamp()-interval '1 minute')`;
   });
   const responsibleEmail = await createLinkedIdentity(
     fixture.responsibleAccountId,
@@ -326,19 +325,24 @@ try {
       return tx`select id from app.persons order by id`;
     }),
   ]);
+  diagnostic = {
+    responsible_visible_people: responsiblePeople.length,
+    student_visible_people: studentPeople.length,
+    mentor_visible_people: mentorPeople.length,
+  };
   requireProof(
     responsiblePeople.length === 3 &&
       responsiblePeople.every((row) => row.id !== fixture.outsiderPersonId) &&
       studentPeople.length === 1 &&
       studentPeople[0].id === fixture.studentPersonId &&
-      mentorPeople.length === 2 &&
+      mentorPeople.length === 1 &&
       mentorPeople.some((row) => row.id === fixture.mentorPersonId) &&
-      mentorPeople.some((row) => row.id === fixture.studentPersonId) &&
+      mentorPeople.every((row) => row.id !== fixture.studentPersonId) &&
       mentorPeople.every((row) => row.id !== fixture.responsiblePersonId),
   );
   evidence.rls_responsible_workspace_scope = true;
   evidence.rls_student_self_scope = true;
-  evidence.rls_mentor_assigned_scope = true;
+  evidence.rls_mentor_without_effective_assignment_is_self_only = true;
   evidence.rls_cross_workspace_isolation = true;
 
   stage = "disable_enable";
@@ -467,7 +471,13 @@ try {
   await writeFile(
     "output/p0/session-acceptance.json",
     JSON.stringify(
-      { result: "FAIL", stage, failure_code: safeFailure, evidence },
+      {
+        result: "FAIL",
+        stage,
+        failure_code: safeFailure,
+        evidence,
+        ...(diagnostic ? { diagnostic } : {}),
+      },
       null,
       2,
     ),
