@@ -147,7 +147,8 @@ try {
     await tx`update app.cohorts set current_plan_id=${plan}::uuid where id=${cohort}::uuid`;
   });
   stage = "identity_and_role_journeys";
-  const sessions = await Promise.all([login(0), login(1), login(2), login(4)]);
+  const sessions = [];
+  for (const index of [0, 1, 2, 4]) sessions.push(await login(index));
   prove(
     sessions.every(
       (item) =>
