@@ -2,6 +2,7 @@
 import { FormEvent, useState } from "react";
 import { TrackingWorkspace } from "./tracking-workspace";
 import { LearningWorkspace } from "./learning-workspace";
+import { FollowupWorkspace } from "./followup-workspace";
 
 type Overview = {
   actor_role: "RESPONSIBLE" | "MENTOR" | "STUDENT";
@@ -212,6 +213,9 @@ export function OperationsShell() {
         actorRole={data.actor_role}
         command={command}
       />
+      {data.actor_role !== "STUDENT" && (
+        <FollowupWorkspace busy={busy} command={command} />
+      )}
       <section className="panel table-panel">
         <div className="panel-heading">
           <div>

@@ -34,6 +34,8 @@ const ALL_MIGRATIONS = [
   "0023_learning_history_integrity.sql",
   "0024_add_finalized_value.sql",
   "0025_finalize_transitions.sql",
+  "0026_p5_followup_foundation.sql",
+  "0027_p5_security.sql",
 ];
 beforeAll(async () => {
   db = new PGlite();
@@ -65,6 +67,38 @@ describe("P4.1 closing-boundary semantics (SQL function contract)", () => {
       "select app.week_closed_in_timezone(current_date,'UTC'::text) as closed",
     );
     expect(typeof res.rows[0].closed).toBe("boolean");
+  });
+});
+
+describe("P5 database contracts", () => {
+  it("creates the four workflows with forced RLS", async () => {
+    const result = await db.query<{
+      relname: string;
+      relforcerowsecurity: boolean;
+    }>(
+      `select relname,relforcerowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace
+       where n.nspname='app' and relname in ('attentions','actions','followups','cases') order by relname`,
+    );
+    expect(result.rows).toHaveLength(4);
+    expect(result.rows.every((row) => row.relforcerowsecurity)).toBe(true);
+  });
+
+  it("keeps active attention signals unique", async () => {
+    const result = await db.query<{ indexdef: string }>(
+      `select indexdef from pg_indexes where schemaname='app' and indexname='attention_active_rule_evidence'`,
+    );
+    expect(result.rows[0].indexdef).toContain("evidence_key");
+    expect(result.rows[0].indexdef).toContain("SNOOZED");
+  });
+
+  it("makes followup corrections and case events immutable", async () => {
+    const result = await db.query<{ tgname: string }>(
+      `select tgname from pg_trigger where not tgisinternal and tgname in ('followup_revision_immutable','case_event_immutable') order by tgname`,
+    );
+    expect(result.rows.map((row) => row.tgname)).toEqual([
+      "case_event_immutable",
+      "followup_revision_immutable",
+    ]);
   });
 });
 
