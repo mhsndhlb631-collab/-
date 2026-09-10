@@ -1,9 +1,10 @@
 "use client";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { TrackingWorkspace } from "./tracking-workspace";
 import { LearningWorkspace } from "./learning-workspace";
 import { FollowupWorkspace } from "./followup-workspace";
 import { ResponsibleCenter } from "./responsible-center";
+import { JourneyPanel } from "./journey-panel";
 
 type Overview = {
   actor_role: "RESPONSIBLE" | "MENTOR" | "STUDENT";
@@ -40,24 +41,99 @@ const empty: Overview = {
   sessions: [],
 };
 
+type Me = {
+  account_id: string;
+  display_name: string;
+  login_name: string;
+  role: Overview["actor_role"];
+  workspace_name: string;
+};
+type View =
+  | "today"
+  | "program"
+  | "sessions"
+  | "tracking"
+  | "learning"
+  | "followup"
+  | "reports"
+  | "progress"
+  | "account";
+const viewLabels: Record<View, string> = {
+  today: "اليوم",
+  program: "البرنامج",
+  sessions: "الجلسات",
+  tracking: "التتبع",
+  learning: "التعلم",
+  followup: "المتابعة",
+  reports: "التقارير",
+  progress: "التقدم",
+  account: "الحساب",
+};
+const roleLabels = {
+  RESPONSIBLE: "مسؤول",
+  MENTOR: "مربي",
+  STUDENT: "طالب",
+};
+
 export function OperationsShell() {
   const [data, setData] = useState<Overview>(empty),
+    [me, setMe] = useState<Me | null>(null),
     [signedIn, setSignedIn] = useState(false),
+    [initializing, setInitializing] = useState(true),
+    [changeRequired, setChangeRequired] = useState(false),
+    [activeView, setActiveView] = useState<View>("today"),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
   async function load() {
-    const [response, sessionsResponse] = await Promise.all([
+    const [meResponse, response, sessionsResponse] = await Promise.all([
+      fetch("/api/v1/me", { cache: "no-store" }),
       fetch("/api/v1/programs", { cache: "no-store" }),
       fetch("/api/v1/sessions", { cache: "no-store" }),
     ]);
-    if (!response.ok || !sessionsResponse.ok)
+    if (meResponse.status === 401) {
+      setSignedIn(false);
+      setMe(null);
+      return false;
+    }
+    if (!meResponse.ok || !response.ok || !sessionsResponse.ok)
       throw new Error("تعذر تحميل مساحة العمل.");
+    const identity = (await meResponse.json()) as Me;
+    setMe(identity);
     setData({
       ...(await response.json()),
       sessions: (await sessionsResponse.json()).sessions,
     });
     setSignedIn(true);
+    return true;
   }
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([
+      fetch("/api/v1/me", { cache: "no-store" }),
+      fetch("/api/v1/programs", { cache: "no-store" }),
+      fetch("/api/v1/sessions", { cache: "no-store" }),
+    ])
+      .then(async ([meResponse, response, sessionsResponse]) => {
+        if (!meResponse.ok || !response.ok || !sessionsResponse.ok) return null;
+        return {
+          identity: (await meResponse.json()) as Me,
+          overview: await response.json(),
+          sessions: (await sessionsResponse.json()).sessions,
+        };
+      })
+      .then((result) => {
+        if (cancelled || !result) return;
+        setMe(result.identity);
+        setData({ ...result.overview, sessions: result.sessions });
+        setSignedIn(true);
+      })
+      .finally(() => {
+        if (!cancelled) setInitializing(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   async function command(path: string, body: unknown, method = "POST") {
     setBusy(true);
     setMessage("");
@@ -71,6 +147,10 @@ export function OperationsShell() {
         body: JSON.stringify(body),
       });
       const result = await response.json();
+      if (response.status === 401) {
+        setSignedIn(false);
+        setMe(null);
+      }
       if (!response.ok)
         throw new Error(result.message ?? "تعذر تنفيذ العملية.");
       await load();
@@ -100,15 +180,120 @@ export function OperationsShell() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message ?? "تعذر تسجيل الدخول.");
-      if (result.next === "CHANGE_PASSWORD")
-        throw new Error("يلزم تغيير كلمة المرور المؤقتة أولًا.");
-      await load();
+      if (result.next === "CHANGE_PASSWORD") {
+        setChangeRequired(true);
+      } else {
+        await load();
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر تسجيل الدخول.");
     } finally {
       setBusy(false);
     }
   }
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget),
+      current = String(form.get("current_password") ?? ""),
+      next = String(form.get("new_password") ?? ""),
+      confirmation = String(form.get("confirm_password") ?? "");
+    if (next !== confirmation) {
+      setMessage("تأكيد كلمة المرور غير مطابق.");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/v1/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ current_password: current, new_password: next }),
+      });
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(result.message ?? "تعذر تغيير كلمة المرور.");
+      setChangeRequired(false);
+      setSignedIn(false);
+      setMe(null);
+      setMessage("تم تغيير كلمة المرور. سجل الدخول بالكلمة الجديدة.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "تعذر تغيير كلمة المرور.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function logout() {
+    setBusy(true);
+    try {
+      await fetch("/api/v1/auth/logout", { method: "POST" });
+    } finally {
+      setSignedIn(false);
+      setMe(null);
+      setActiveView("today");
+      setBusy(false);
+      setMessage("تم تسجيل الخروج.");
+    }
+  }
+  if (initializing)
+    return (
+      <main className="app-loading" aria-busy="true">
+        <div className="brand-mark-static" aria-hidden="true">
+          ق
+        </div>
+        <p role="status">جارٍ تجهيز مساحتك…</p>
+      </main>
+    );
+  if (changeRequired)
+    return (
+      <main className="auth-page">
+        <section className="login-card" aria-labelledby="change-title">
+          <span className="section-kicker">حماية الحساب</span>
+          <h1 id="change-title">تغيير كلمة المرور</h1>
+          <p className="muted">اختر كلمة جديدة قبل متابعة استخدام المنصة.</p>
+          <form onSubmit={changePassword} className="stack">
+            <label>
+              كلمة المرور الحالية
+              <input
+                name="current_password"
+                type="password"
+                autoComplete="current-password"
+                required
+              />
+            </label>
+            <label>
+              كلمة المرور الجديدة
+              <input
+                name="new_password"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                required
+              />
+            </label>
+            <label>
+              تأكيد كلمة المرور
+              <input
+                name="confirm_password"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                required
+              />
+            </label>
+            <button disabled={busy}>
+              {busy ? "جارٍ الحفظ…" : "حفظ وتسجيل الدخول من جديد"}
+            </button>
+          </form>
+          {message && (
+            <p className="notice" role="alert">
+              {message}
+            </p>
+          )}
+        </section>
+      </main>
+    );
   if (!signedIn)
     return (
       <main className="login-page">
@@ -152,101 +337,200 @@ export function OperationsShell() {
         </section>
       </main>
     );
+  const allowedViews: View[] =
+    data.actor_role === "RESPONSIBLE"
+      ? [
+          "today",
+          "reports",
+          "program",
+          "sessions",
+          "tracking",
+          "learning",
+          "followup",
+          "progress",
+          "account",
+        ]
+      : data.actor_role === "MENTOR"
+        ? [
+            "today",
+            "sessions",
+            "tracking",
+            "learning",
+            "followup",
+            "progress",
+            "program",
+            "account",
+          ]
+        : ["today", "program", "tracking", "learning", "progress", "account"];
   return (
-    <main className="dashboard">
+    <main className="dashboard" id="main-content">
+      <a className="skip-link" href="#workspace-content">
+        انتقل إلى المحتوى
+      </a>
       <header className="topbar">
         <div>
-          <span className="eyebrow">قِوام · التشغيل</span>
-          <h1>البرنامج والجلسات والتتبع</h1>
+          <span className="eyebrow">قِوام · {roleLabels[data.actor_role]}</span>
+          <h1>{me ? `مرحبًا، ${me.display_name}` : "مساحة العمل"}</h1>
         </div>
-        <span className="status-dot">متصل</span>
+        <div className="account-actions">
+          <span className="status-dot">{me?.workspace_name ?? "متصل"}</span>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => void logout()}
+            disabled={busy}
+          >
+            تسجيل الخروج
+          </button>
+        </div>
       </header>
+      <nav className="role-nav" aria-label="أقسام مساحة العمل">
+        {allowedViews.map((view) => (
+          <button
+            type="button"
+            key={view}
+            aria-current={activeView === view ? "page" : undefined}
+            className={activeView === view ? "active" : "secondary"}
+            onClick={() => setActiveView(view)}
+          >
+            {viewLabels[view]}
+          </button>
+        ))}
+      </nav>
       {message && (
         <p className="notice" role="status">
           {message}
         </p>
       )}
-      <section className="stats">
-        <article>
-          <strong>{data.templates.length}</strong>
-          <span>قوالب</span>
-        </article>
-        <article>
-          <strong>
-            {data.plans.filter((p) => p.status === "PUBLISHED").length}
-          </strong>
-          <span>خطط منشورة</span>
-        </article>
-        <article>
-          <strong>{data.cohorts.length}</strong>
-          <span>دفعات</span>
-        </article>
-        <article>
-          <strong>{data.cohorts.flatMap((c) => c.groups).length}</strong>
-          <span>مجموعات</span>
-        </article>
-        <article>
-          <strong>{data.sessions.length}</strong>
-          <span>جلسات</span>
-        </article>
-      </section>
-      {data.actor_role === "RESPONSIBLE" && <ResponsibleCenter />}
-      {data.actor_role === "RESPONSIBLE" && (
-        <section className="workspace-grid">
-          <TemplateForm busy={busy} submit={command} />
-          <PlanForm busy={busy} data={data} submit={command} />
-          <CohortForm busy={busy} data={data} submit={command} />
-        </section>
-      )}
-      {data.actor_role !== "STUDENT" && (
-        <SessionWorkspace
-          busy={busy}
-          sessions={data.sessions}
-          command={command}
-        />
-      )}
-      <TrackingWorkspace
-        busy={busy}
-        actorRole={data.actor_role}
-        command={command}
-      />
-      <LearningWorkspace
-        busy={busy}
-        actorRole={data.actor_role}
-        command={command}
-      />
-      {data.actor_role !== "STUDENT" && (
-        <FollowupWorkspace busy={busy} command={command} />
-      )}
-      <section className="panel table-panel">
-        <div className="panel-heading">
-          <div>
-            <span className="section-kicker">السجل</span>
-            <h2>الدفعات الحالية</h2>
-          </div>
-        </div>
-        {data.cohorts.length ? (
-          <div className="cohort-list">
-            {data.cohorts.map((c) => (
-              <article key={c.id}>
-                <div>
-                  <strong>{c.name}</strong>
-                  <span>
-                    {c.starts_on} — {c.ends_on}
-                  </span>
-                </div>
-                <div className="chips">
-                  {c.groups.map((g) => (
-                    <span key={g.id}>{g.name}</span>
-                  ))}
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="empty">لا توجد دفعات بعد. ابدأ بقالب ثم انشر خطة.</p>
+      <div id="workspace-content" tabIndex={-1}>
+        {activeView === "today" && <JourneyPanel kind="today" />}
+        {activeView === "program" && <JourneyPanel kind="program" />}
+        {activeView === "progress" && <JourneyPanel kind="progress" />}
+        {activeView === "program" && data.actor_role === "RESPONSIBLE" && (
+          <section className="stats">
+            <article>
+              <strong>{data.templates.length}</strong>
+              <span>قوالب</span>
+            </article>
+            <article>
+              <strong>
+                {data.plans.filter((p) => p.status === "PUBLISHED").length}
+              </strong>
+              <span>خطط منشورة</span>
+            </article>
+            <article>
+              <strong>{data.cohorts.length}</strong>
+              <span>دفعات</span>
+            </article>
+            <article>
+              <strong>{data.cohorts.flatMap((c) => c.groups).length}</strong>
+              <span>مجموعات</span>
+            </article>
+            <article>
+              <strong>{data.sessions.length}</strong>
+              <span>جلسات</span>
+            </article>
+          </section>
         )}
-      </section>
+        {activeView === "reports" && data.actor_role === "RESPONSIBLE" && (
+          <ResponsibleCenter />
+        )}
+        {activeView === "program" && data.actor_role === "RESPONSIBLE" && (
+          <section className="workspace-grid">
+            <TemplateForm busy={busy} submit={command} />
+            <PlanForm busy={busy} data={data} submit={command} />
+            <CohortForm busy={busy} data={data} submit={command} />
+          </section>
+        )}
+        {activeView === "sessions" && data.actor_role !== "STUDENT" && (
+          <SessionWorkspace
+            busy={busy}
+            sessions={data.sessions}
+            command={command}
+          />
+        )}
+        {activeView === "tracking" && (
+          <TrackingWorkspace
+            busy={busy}
+            actorRole={data.actor_role}
+            command={command}
+          />
+        )}
+        {activeView === "learning" && (
+          <LearningWorkspace
+            busy={busy}
+            actorRole={data.actor_role}
+            command={command}
+          />
+        )}
+        {activeView === "followup" && data.actor_role !== "STUDENT" && (
+          <FollowupWorkspace busy={busy} command={command} />
+        )}
+        {activeView === "program" && data.actor_role === "RESPONSIBLE" && (
+          <section className="panel table-panel">
+            <div className="panel-heading">
+              <div>
+                <span className="section-kicker">السجل</span>
+                <h2>الدفعات الحالية</h2>
+              </div>
+            </div>
+            {data.cohorts.length ? (
+              <div className="cohort-list">
+                {data.cohorts.map((c) => (
+                  <article key={c.id}>
+                    <div>
+                      <strong>{c.name}</strong>
+                      <span>
+                        {c.starts_on} — {c.ends_on}
+                      </span>
+                    </div>
+                    <div className="chips">
+                      {c.groups.map((g) => (
+                        <span key={g.id}>{g.name}</span>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="empty">
+                لا توجد دفعات بعد. ابدأ بقالب ثم انشر خطة.
+              </p>
+            )}
+          </section>
+        )}
+        {activeView === "account" && me && (
+          <section className="panel table-panel account-panel">
+            <div>
+              <span className="section-kicker">الحساب</span>
+              <h2>{me.display_name}</h2>
+            </div>
+            <dl>
+              <div>
+                <dt>اسم الدخول</dt>
+                <dd>{me.login_name}</dd>
+              </div>
+              <div>
+                <dt>الدور</dt>
+                <dd>{roleLabels[me.role]}</dd>
+              </div>
+              <div>
+                <dt>الجهة</dt>
+                <dd>{me.workspace_name}</dd>
+              </div>
+            </dl>
+            <button
+              type="button"
+              onClick={() => {
+                setMessage("");
+                setChangeRequired(true);
+              }}
+            >
+              تغيير كلمة المرور
+            </button>
+          </section>
+        )}
+      </div>
     </main>
   );
 }

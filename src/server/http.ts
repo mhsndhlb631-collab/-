@@ -18,7 +18,9 @@ export function logRequest(event: {
     | "p4-query"
     | "p5-command"
     | "p5-query"
-    | "p6-query";
+    | "p6-query"
+    | "p7-query"
+    | "auth";
   status: number;
 }) {
   console.info(
@@ -45,7 +47,9 @@ export async function endpoint(
     | "p4-query"
     | "p5-command"
     | "p5-query"
-    | "p6-query",
+    | "p6-query"
+    | "p7-query"
+    | "auth",
   action: (requestId: string) => Promise<unknown>,
 ) {
   const id = randomUUID(); // do not trust client request IDs as log contents
