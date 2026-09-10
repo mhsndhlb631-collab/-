@@ -81,6 +81,7 @@ export function OperationsShell() {
     [signedIn, setSignedIn] = useState(false),
     [initializing, setInitializing] = useState(true),
     [changeRequired, setChangeRequired] = useState(false),
+    [passwordOptional, setPasswordOptional] = useState(false),
     [activeView, setActiveView] = useState<View>("today"),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
@@ -181,6 +182,7 @@ export function OperationsShell() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.message ?? "تعذر تسجيل الدخول.");
       if (result.next === "CHANGE_PASSWORD") {
+        setPasswordOptional(false);
         setChangeRequired(true);
       } else {
         await load();
@@ -213,6 +215,7 @@ export function OperationsShell() {
       if (!response.ok)
         throw new Error(result.message ?? "تعذر تغيير كلمة المرور.");
       setChangeRequired(false);
+      setPasswordOptional(false);
       setSignedIn(false);
       setMe(null);
       setMessage("تم تغيير كلمة المرور. سجل الدخول بالكلمة الجديدة.");
@@ -285,6 +288,19 @@ export function OperationsShell() {
             <button disabled={busy}>
               {busy ? "جارٍ الحفظ…" : "حفظ وتسجيل الدخول من جديد"}
             </button>
+            {passwordOptional && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setMessage("");
+                  setChangeRequired(false);
+                  setPasswordOptional(false);
+                }}
+              >
+                رجوع إلى الحساب
+              </button>
+            )}
           </form>
           {message && (
             <p className="notice" role="alert">
@@ -403,9 +419,13 @@ export function OperationsShell() {
         </p>
       )}
       <div id="workspace-content" tabIndex={-1}>
-        {activeView === "today" && <JourneyPanel kind="today" />}
-        {activeView === "program" && <JourneyPanel kind="program" />}
-        {activeView === "progress" && <JourneyPanel kind="progress" />}
+        {activeView === "today" && <JourneyPanel key="today" kind="today" />}
+        {activeView === "program" && (
+          <JourneyPanel key="program" kind="program" />
+        )}
+        {activeView === "progress" && (
+          <JourneyPanel key="progress" kind="progress" />
+        )}
         {activeView === "program" && data.actor_role === "RESPONSIBLE" && (
           <section className="stats">
             <article>
@@ -523,6 +543,7 @@ export function OperationsShell() {
               type="button"
               onClick={() => {
                 setMessage("");
+                setPasswordOptional(true);
                 setChangeRequired(true);
               }}
             >
