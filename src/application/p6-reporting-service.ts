@@ -287,12 +287,13 @@ export class P6ReportingService {
     return { report_type: "GROUP_WEEK", period: { from, to }, group: rows[0] };
   }
 
-  mentorWeek(query: unknown) {
+  async mentorWeek(query: unknown) {
     const value = parse(reportSchema, query);
-    return this.performance(value.subject_id, {
+    const performance = await this.performance(value.subject_id, {
       from: value.from,
       to: value.to,
     });
+    return { report_type: "MENTOR_WEEK", ...performance };
   }
 
   async program(query: unknown) {
