@@ -16,4 +16,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run monitor:production
+      - run: npm run monitor:production -- --evidence
+      - name: Preserve sanitized Pilot evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: production-monitor-${{ github.run_id }}
+          path: output/p8/monitoring.json
+          if-no-files-found: error
+          retention-days: 30
