@@ -31,6 +31,11 @@
     "acceptance:p5": "node --env-file=.env.local scripts/run-p5-acceptance.ts",
     "acceptance:p6": "node --env-file=.env.local scripts/run-p6-acceptance.ts",
     "acceptance:p7": "node --env-file=.env.local scripts/run-p7-acceptance.ts",
+    "acceptance:p8:security": "node --env-file=.env.local scripts/run-p8-security.ts",
+    "acceptance:p8:load": "node --env-file=.env.local scripts/run-p8-load.ts",
+    "acceptance:p8:recovery": "node --env-file=.env.local scripts/run-p8-recovery.ts",
+    "acceptance:p8:environments": "node --env-file=.env.local scripts/run-p8-environment-check.ts",
+    "monitor:production": "node scripts/run-p8-monitor.ts",
     "vercel:configure": "node scripts/configure-vercel.ts"
   },
   "dependencies": {

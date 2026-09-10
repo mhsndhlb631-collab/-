@@ -1,6 +1,6 @@
-# نظام التشغيل التربوي — P7
+# نظام التشغيل التربوي — P8
 
-**الحالة: P7 مغلقة، وP8 لم تبدأ.**
+**الحالة: P7 مغلقة، وتجهيز P8 وPilot قيد التنفيذ. لا تُغلق P8 قبل مرور أسبوعين تشغيليين ناجحين.**
 
 مشروع Next.js App Router وTypeScript لإعداد البرامج وتشغيل جلساتها وتتبع تقدم الطلاب. يدعم القوالب والخطط والدفعات والمجموعات، والجلسات والحضور، والتتبع، والمحتوى والتكليفات والاختبارات، والمتابعة والحالات، وقياس أداء المربين والتقارير. تكمل P7 رحلات المسؤول والمربي والطالب بصفحات اليوم والبرنامج والتقدم، وتنقل مخصص للدور، وتغيير كلمة المرور والخروج، وتجربة عربية RTL متجاوبة ويمكن تشغيلها بلوحة المفاتيح. تعمل الطلبات عبر مستخدم PostgreSQL محدود مع RLS إجباري.
 
@@ -28,6 +28,11 @@ npm run typecheck
 npm test
 npm run build
 npm run smoke
+npm run acceptance:p8:security
+npm run acceptance:p8:load
+npm run acceptance:p8:environments
+npm run acceptance:p8:recovery
+npm run monitor:production
 ```
 
 اختبارات قاعدة البيانات تستخدم PGlite محليًا. لا تُعد بديلًا لاختبارات Supabase أو Vercel أو اتصالات PostgreSQL المجمعة.
@@ -56,5 +61,9 @@ npm run smoke
 - [تقرير إغلاق P6](docs/p6-status.md)
 - [عقد P7 المجمد](docs/p7-contract.md)
 - [تقرير إغلاق P7](docs/p7-status.md)
+- [عقد P8 المجمد](docs/p8-contract.md)
+- [حالة P8 الحالية](docs/p8-status.md)
+- [دليل تشغيل الإنتاج](docs/runbooks/production-operations.md)
+- [دليل الـPilot لأسبوعين](docs/runbooks/pilot.md)
 
 لا تضع الأسرار في المستودع أو المحادثة. ملفات `.env*` مستبعدة من Git، باستثناء القالب الخالي من الأسرار. لا تستخدم اتصال migrations في خادم التطبيق.
