@@ -189,20 +189,28 @@ try {
   prove(cold.status === 200);
   report.evidence.cold_start_reported_separately = true;
 
-  stage = "warmup";
-  await Promise.all(
-    sessions.map((session) =>
-      timedRead("/api/v1/me", session.cookie, session.role),
-    ),
-  );
-
-  stage = "reference_load";
-  const durations: { path: string; duration: number }[] = [];
   const paths = [
     "/api/v1/me/today",
     "/api/v1/me/program",
     "/api/v1/me/progress",
   ];
+  stage = "operational_cold_start_measurement";
+  for (const path of paths) {
+    const [coldPath] = await Promise.all([
+      timedRead(path, sessions[0].cookie, sessions[0].role),
+    ]);
+    report.measurements[`cold_${path.split("/").at(-1)}_ms`] =
+      Math.round(coldPath.duration * 10) / 10;
+  }
+
+  stage = "warmup";
+  for (const path of paths)
+    await Promise.all(
+      sessions.map((session) => timedRead(path, session.cookie, session.role)),
+    );
+
+  stage = "reference_load";
+  const durations: { path: string; duration: number }[] = [];
   for (let round = 0; round < 15; round++) {
     const measured = await Promise.all(
       sessions.map((session, userIndex) => {
@@ -231,8 +239,15 @@ try {
     report.measurements.p95_ms < 1000,
     "operational read P95 exceeded 1000ms",
   );
+  prove(
+    paths.every(
+      (path) => report.measurements[`p95_${path.split("/").at(-1)}_ms`] < 1000,
+    ),
+    "one or more operational route P95 values exceeded 1000ms",
+  );
   report.evidence.all_reference_requests_succeeded = true;
   report.evidence.operational_read_p95_below_1000ms = true;
+  report.evidence.every_operational_route_p95_below_1000ms = true;
   report.result = "PASS";
   console.log(
     `PASS: P8 reference load completed; P95 ${report.measurements.p95_ms}ms across ${durations.length} reads.`,
