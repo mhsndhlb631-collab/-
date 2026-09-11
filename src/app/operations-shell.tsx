@@ -79,6 +79,29 @@ const roleLabels = {
   STUDENT: "طالب",
 };
 
+const navGroups: { label: string; views: View[] }[] = [
+  { label: "الرئيسية", views: ["today", "reports"] },
+  { label: "الإدارة", views: ["people", "program", "sessions"] },
+  {
+    label: "التتبع",
+    views: ["tracking", "learning", "followup", "progress"],
+  },
+  { label: "الإعدادات", views: ["account"] },
+];
+
+const viewIcons: Record<View, string> = {
+  today: "⌂",
+  people: "♙",
+  program: "▦",
+  sessions: "◷",
+  tracking: "◎",
+  learning: "◇",
+  followup: "◉",
+  reports: "⌁",
+  progress: "↗",
+  account: "⚙",
+};
+
 export function OperationsShell() {
   const [data, setData] = useState<Overview>(empty),
     [me, setMe] = useState<Me | null>(null),
@@ -87,8 +110,46 @@ export function OperationsShell() {
     [changeRequired, setChangeRequired] = useState(false),
     [passwordOptional, setPasswordOptional] = useState(false),
     [activeView, setActiveView] = useState<View>("today"),
+    [theme, setTheme] = useState<"dark" | "light">("dark"),
+    [sidebarCollapsed, setSidebarCollapsed] = useState(false),
+    [mobileNavOpen, setMobileNavOpen] = useState(false),
+    [paletteOpen, setPaletteOpen] = useState(false),
+    [paletteQuery, setPaletteQuery] = useState(""),
+    [profileOpen, setProfileOpen] = useState(false),
+    [notificationsOpen, setNotificationsOpen] = useState(false),
+    [passwordVisible, setPasswordVisible] = useState(false),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem("qiwam-theme");
+    const restoreTheme = window.setTimeout(() => {
+      if (savedTheme === "light") setTheme("light");
+    }, 0);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((value) => !value);
+      }
+      if (event.key === "Escape") {
+        setPaletteOpen(false);
+        setProfileOpen(false);
+        setNotificationsOpen(false);
+        setMobileNavOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.clearTimeout(restoreTheme);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    window.localStorage.setItem("qiwam-theme", next);
+  }
   async function load() {
     const [meResponse, response, sessionsResponse] = await Promise.all([
       fetch("/api/v1/me", { cache: "no-store" }),
@@ -321,8 +382,49 @@ export function OperationsShell() {
           <span className="eyebrow">منصة قِوام</span>
           <h1>نظام التشغيل التربوي</h1>
           <p>
-            نظّم البرنامج والدفعات والمجموعات مع تاريخ واضح لكل قرار وإسناد.
+            كل ما تحتاجه لإدارة الرحلة التربوية، في مساحة واحدة واضحة وذكية.
           </p>
+          <div className="product-preview" aria-hidden="true">
+            <div className="preview-bar">
+              <i />
+              <i />
+              <i />
+              <span>لوحة اليوم</span>
+            </div>
+            <div className="preview-body">
+              <aside>
+                <b>ق</b>
+                <i />
+                <i />
+                <i />
+              </aside>
+              <section>
+                <div className="preview-title" />
+                <div className="preview-stats">
+                  <i />
+                  <i />
+                  <i />
+                </div>
+                <div className="preview-chart">
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </section>
+            </div>
+            <div className="floating-stat floating-stat-one">
+              <small>معدل الحضور</small>
+              <strong>٩٢٪</strong>
+              <span>↑ ٨٪ هذا الشهر</span>
+            </div>
+            <div className="floating-stat floating-stat-two">
+              <small>جلسة اليوم</small>
+              <strong>٤ جلسات</strong>
+              <span>الجميع على الموعد</span>
+            </div>
+          </div>
           <div className="brand-mark" aria-hidden="true">
             ق
           </div>
@@ -334,16 +436,38 @@ export function OperationsShell() {
           <form onSubmit={login} className="stack">
             <label>
               اسم الدخول
-              <input name="login_name" autoComplete="username" required />
+              <span className="input-with-icon">
+                <i aria-hidden="true">♙</i>
+                <input
+                  name="login_name"
+                  autoComplete="username"
+                  placeholder="أدخل اسم المستخدم"
+                  required
+                />
+              </span>
             </label>
             <label>
               كلمة المرور
-              <input
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-              />
+              <span className="input-with-icon">
+                <i aria-hidden="true">◇</i>
+                <input
+                  name="password"
+                  type={passwordVisible ? "text" : "password"}
+                  autoComplete="current-password"
+                  placeholder="أدخل كلمة المرور"
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setPasswordVisible((value) => !value)}
+                  aria-label={
+                    passwordVisible ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"
+                  }
+                >
+                  {passwordVisible ? "◉" : "◎"}
+                </button>
+              </span>
             </label>
             <button disabled={busy}>
               {busy ? "جارٍ التحقق…" : "تسجيل الدخول"}
@@ -383,197 +507,560 @@ export function OperationsShell() {
             "account",
           ]
         : ["today", "program", "tracking", "learning", "progress", "account"];
+  const searchTargets: Array<{
+    id: string;
+    title: string;
+    detail: string;
+    view: View;
+    icon: string;
+  }> = [
+    ...allowedViews.map((view) => ({
+      id: `view-${view}`,
+      title: viewLabels[view],
+      detail: `صفحة ${viewLabels[view]}`,
+      view,
+      icon: viewIcons[view],
+    })),
+    ...data.cohorts.map((cohort) => ({
+      id: `cohort-${cohort.id}`,
+      title: cohort.name,
+      detail: "دفعة في البرنامج",
+      view: "program" as View,
+      icon: "▦",
+    })),
+    ...data.cohorts.flatMap((cohort) =>
+      cohort.groups.map((group) => ({
+        id: `group-${group.id}`,
+        title: group.name,
+        detail: `مجموعة · ${cohort.name}`,
+        view: "program" as View,
+        icon: "◫",
+      })),
+    ),
+    ...data.sessions.map((session) => ({
+      id: `session-${session.id}`,
+      title: session.name,
+      detail: `جلسة · ${session.group_name}`,
+      view: "sessions" as View,
+      icon: "◷",
+    })),
+  ];
+  const normalizedQuery = paletteQuery.trim().toLocaleLowerCase("ar");
+  const filteredTargets = searchTargets
+    .filter((target) =>
+      `${target.title} ${target.detail}`
+        .toLocaleLowerCase("ar")
+        .includes(normalizedQuery),
+    )
+    .slice(0, 12);
   return (
-    <main className="dashboard" id="main-content">
+    <main
+      className={`dashboard app-theme-${theme}${sidebarCollapsed ? " sidebar-is-collapsed" : ""}`}
+      id="main-content"
+    >
       <a className="skip-link" href="#workspace-content">
         انتقل إلى المحتوى
       </a>
-      <header className="topbar">
-        <div>
-          <span className="eyebrow">قِوام · {roleLabels[data.actor_role]}</span>
-          <h1>{me ? `مرحبًا، ${me.display_name}` : "مساحة العمل"}</h1>
-        </div>
-        <div className="account-actions">
-          <span className="status-dot">{me?.workspace_name ?? "متصل"}</span>
+      <aside className={`saas-sidebar${mobileNavOpen ? " is-open" : ""}`}>
+        <div className="sidebar-brand">
+          <span className="qiwam-logo" aria-hidden="true">
+            ق
+          </span>
+          <div className="sidebar-label">
+            <strong>قِوام</strong>
+            <small>نظام التشغيل التربوي</small>
+          </div>
           <button
+            className="icon-button mobile-close"
             type="button"
-            className="secondary"
-            onClick={() => void logout()}
-            disabled={busy}
+            onClick={() => setMobileNavOpen(false)}
+            aria-label="إغلاق القائمة"
           >
-            تسجيل الخروج
+            ×
           </button>
         </div>
-      </header>
-      <nav className="role-nav" aria-label="أقسام مساحة العمل">
-        {allowedViews.map((view) => (
-          <button
-            type="button"
-            key={view}
-            aria-current={activeView === view ? "page" : undefined}
-            className={activeView === view ? "active" : "secondary"}
-            onClick={() => setActiveView(view)}
-          >
-            {viewLabels[view]}
-          </button>
-        ))}
-      </nav>
-      {message && (
-        <p className="notice" role="status">
-          {message}
-        </p>
-      )}
-      <div id="workspace-content" tabIndex={-1}>
-        {activeView === "today" && (
-          <>
-            <JourneyPanel key="today" kind="today" />
-            {data.actor_role === "RESPONSIBLE" && (
-              <SetupGuide data={data} open={setActiveView} />
-            )}
-          </>
-        )}
-        {activeView === "people" && data.actor_role === "RESPONSIBLE" && (
-          <PeopleWorkspace busy={busy} command={command} />
-        )}
-        {activeView === "program" && (
-          <JourneyPanel key="program" kind="program" />
-        )}
-        {activeView === "progress" && (
-          <JourneyPanel key="progress" kind="progress" />
-        )}
-        {activeView === "program" && data.actor_role === "RESPONSIBLE" && (
-          <section className="stats">
-            <article>
-              <strong>{data.templates.length}</strong>
-              <span>قوالب</span>
-            </article>
-            <article>
-              <strong>
-                {data.plans.filter((p) => p.status === "PUBLISHED").length}
-              </strong>
-              <span>خطط منشورة</span>
-            </article>
-            <article>
-              <strong>{data.cohorts.length}</strong>
-              <span>دفعات</span>
-            </article>
-            <article>
-              <strong>{data.cohorts.flatMap((c) => c.groups).length}</strong>
-              <span>مجموعات</span>
-            </article>
-            <article>
-              <strong>{data.sessions.length}</strong>
-              <span>جلسات</span>
-            </article>
-          </section>
-        )}
-        {activeView === "reports" && data.actor_role === "RESPONSIBLE" && (
-          <ResponsibleCenter />
-        )}
-        {activeView === "program" && data.actor_role === "RESPONSIBLE" && (
-          <section className="workspace-grid">
-            <TemplateForm busy={busy} submit={command} />
-            <PlanForm busy={busy} data={data} submit={command} />
-            <CohortForm busy={busy} data={data} submit={command} />
-          </section>
-        )}
-        {activeView === "program" && data.actor_role === "RESPONSIBLE" && (
-          <DistributionWorkspace
-            busy={busy}
-            cohorts={data.cohorts}
-            command={command}
-          />
-        )}
-        {activeView === "sessions" && data.actor_role !== "STUDENT" && (
-          <SessionWorkspace
-            busy={busy}
-            sessions={data.sessions}
-            command={command}
-          />
-        )}
-        {activeView === "tracking" && (
-          <TrackingWorkspace
-            busy={busy}
-            actorRole={data.actor_role}
-            command={command}
-          />
-        )}
-        {activeView === "learning" && (
-          <LearningWorkspace
-            busy={busy}
-            actorRole={data.actor_role}
-            command={command}
-          />
-        )}
-        {activeView === "followup" && data.actor_role !== "STUDENT" && (
-          <FollowupWorkspace busy={busy} command={command} />
-        )}
-        {activeView === "program" && data.actor_role === "RESPONSIBLE" && (
-          <section className="panel table-panel">
-            <div className="panel-heading">
-              <div>
-                <span className="section-kicker">السجل</span>
-                <h2>الدفعات الحالية</h2>
-              </div>
-            </div>
-            {data.cohorts.length ? (
-              <div className="cohort-list">
-                {data.cohorts.map((c) => (
-                  <article key={c.id}>
-                    <div>
-                      <strong>{c.name}</strong>
-                      <span>
-                        {c.starts_on} — {c.ends_on}
-                      </span>
-                    </div>
-                    <div className="chips">
-                      {c.groups.map((g) => (
-                        <span key={g.id}>{g.name}</span>
-                      ))}
-                    </div>
-                  </article>
+        <button
+          className="command-trigger"
+          type="button"
+          onClick={() => setPaletteOpen(true)}
+        >
+          <span aria-hidden="true">⌕</span>
+          <span className="sidebar-label">بحث سريع</span>
+          <kbd className="sidebar-label">Ctrl K</kbd>
+        </button>
+        <nav className="sidebar-nav" aria-label="أقسام مساحة العمل">
+          {navGroups.map((group) => {
+            const groupViews = group.views.filter((view) =>
+              allowedViews.includes(view),
+            );
+            if (!groupViews.length) return null;
+            return (
+              <div className="nav-group" key={group.label}>
+                <span className="nav-group-label sidebar-label">
+                  {group.label}
+                </span>
+                {groupViews.map((view) => (
+                  <button
+                    type="button"
+                    key={view}
+                    title={viewLabels[view]}
+                    aria-current={activeView === view ? "page" : undefined}
+                    onClick={() => {
+                      setActiveView(view);
+                      setMobileNavOpen(false);
+                    }}
+                  >
+                    <span className="nav-icon" aria-hidden="true">
+                      {viewIcons[view]}
+                    </span>
+                    <span className="sidebar-label">{viewLabels[view]}</span>
+                  </button>
                 ))}
               </div>
-            ) : (
-              <p className="empty">
-                لا توجد دفعات بعد. ابدأ بقالب ثم انشر خطة.
-              </p>
-            )}
-          </section>
-        )}
-        {activeView === "account" && me && (
-          <section className="panel table-panel account-panel">
-            <div>
-              <span className="section-kicker">الحساب</span>
-              <h2>{me.display_name}</h2>
+            );
+          })}
+        </nav>
+        <div className="sidebar-footer">
+          <button
+            className="user-summary"
+            type="button"
+            onClick={() => setProfileOpen((value) => !value)}
+            aria-expanded={profileOpen}
+          >
+            <span className="avatar">
+              {me?.display_name?.slice(0, 1) ?? "ق"}
+            </span>
+            <span className="sidebar-label">
+              <strong>{me?.display_name}</strong>
+              <small>{roleLabels[data.actor_role]}</small>
+            </span>
+            <span className="sidebar-label">⌄</span>
+          </button>
+          {profileOpen && (
+            <div className="profile-menu">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveView("account");
+                  setProfileOpen(false);
+                }}
+              >
+                إعدادات الحساب
+              </button>
+              <button
+                type="button"
+                onClick={() => void logout()}
+                disabled={busy}
+              >
+                تسجيل الخروج
+              </button>
             </div>
-            <dl>
-              <div>
-                <dt>اسم الدخول</dt>
-                <dd>{me.login_name}</dd>
+          )}
+          <button
+            className="collapse-button"
+            type="button"
+            onClick={() => setSidebarCollapsed((value) => !value)}
+            aria-label={
+              sidebarCollapsed ? "توسيع الشريط الجانبي" : "طي الشريط الجانبي"
+            }
+          >
+            <span aria-hidden="true">{sidebarCollapsed ? "‹" : "›"}</span>
+            <span className="sidebar-label">طي القائمة</span>
+          </button>
+        </div>
+      </aside>
+      {mobileNavOpen && (
+        <button
+          className="sidebar-scrim"
+          type="button"
+          aria-label="إغلاق القائمة"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+      <section className="app-stage">
+        <header className="topbar">
+          <div className="topbar-heading">
+            <button
+              className="icon-button mobile-menu"
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="فتح القائمة"
+            >
+              ☰
+            </button>
+            <div>
+              <div className="breadcrumbs">
+                <span>الرئيسية</span>
+                <b>/</b>
+                <strong>{viewLabels[activeView]}</strong>
               </div>
-              <div>
-                <dt>الدور</dt>
-                <dd>{roleLabels[me.role]}</dd>
-              </div>
-              <div>
-                <dt>الجهة</dt>
-                <dd>{me.workspace_name}</dd>
-              </div>
-            </dl>
+              <h1>{viewLabels[activeView]}</h1>
+            </div>
+          </div>
+          <div className="account-actions">
+            <button
+              className="top-search"
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+            >
+              <span>⌕</span>
+              <span>ابحث في قِوام…</span>
+              <kbd>Ctrl K</kbd>
+            </button>
+            <button
+              className="icon-button"
+              type="button"
+              onClick={toggleTheme}
+              aria-label={
+                theme === "dark" ? "تفعيل الوضع الفاتح" : "تفعيل الوضع الداكن"
+              }
+            >
+              {theme === "dark" ? "☀" : "☾"}
+            </button>
+            <button
+              className="icon-button notification-button"
+              type="button"
+              aria-label="الإشعارات"
+              aria-expanded={notificationsOpen}
+              onClick={() => setNotificationsOpen((value) => !value)}
+            >
+              ♢<i />
+            </button>
+            {notificationsOpen && (
+              <section
+                className="notification-panel"
+                aria-label="مركز الإشعارات"
+              >
+                <header>
+                  <div>
+                    <strong>الإشعارات</strong>
+                    <small>آخر تحديثات مساحة العمل</small>
+                  </div>
+                  <span>الكل مقروء</span>
+                </header>
+                <div className="notification-empty">
+                  <b aria-hidden="true">♢</b>
+                  <strong>لا توجد إشعارات جديدة</strong>
+                  <small>ستظهر هنا التنبيهات التي تحتاج تدخلك.</small>
+                </div>
+              </section>
+            )}
+            <span className="status-dot">{me?.workspace_name ?? "متصل"}</span>
             <button
               type="button"
-              onClick={() => {
-                setMessage("");
-                setPasswordOptional(true);
-                setChangeRequired(true);
-              }}
+              className="avatar top-avatar"
+              onClick={() => setProfileOpen((value) => !value)}
+              aria-label="قائمة الحساب"
             >
-              تغيير كلمة المرور
+              {me?.display_name?.slice(0, 1) ?? "ق"}
             </button>
-          </section>
+          </div>
+        </header>
+        {message && (
+          <div className="toast-notice" role="status">
+            <span aria-hidden="true">✓</span>
+            <div>
+              <strong>تحديث المنصة</strong>
+              <p>{message}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMessage("")}
+              aria-label="إغلاق الرسالة"
+            >
+              ×
+            </button>
+          </div>
         )}
-      </div>
+        <div id="workspace-content" className="workspace-content" tabIndex={-1}>
+          {activeView === "today" && (
+            <>
+              <section className="today-welcome">
+                <div>
+                  <span className="section-kicker">مساحة العمل اليوم</span>
+                  <h2>{me ? `أهلًا ${me.display_name}` : "أهلًا بك"}</h2>
+                  <p>
+                    تابع الجلسات والطلاب والخطوات التي تحتاج انتباهك من مكان
+                    واحد.
+                  </p>
+                </div>
+                <div className="quick-actions" aria-label="إجراءات سريعة">
+                  {data.actor_role === "RESPONSIBLE" && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveView("people")}
+                    >
+                      <span>＋</span>إضافة طالب
+                    </button>
+                  )}
+                  {data.actor_role !== "STUDENT" && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveView("sessions")}
+                    >
+                      <span>◷</span>فتح جلسة
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setActiveView("learning")}
+                  >
+                    <span>◇</span>إضافة تكليف
+                  </button>
+                </div>
+              </section>
+              <section
+                className="stats dashboard-stats"
+                aria-label="ملخص اليوم"
+              >
+                <article>
+                  <small>الجلسات</small>
+                  <strong>{data.sessions.length}</strong>
+                  <span>إجمالي الجلسات</span>
+                </article>
+                <article>
+                  <small>جلسات مفتوحة</small>
+                  <strong>
+                    {
+                      data.sessions.filter(
+                        (session) => session.status === "OPEN",
+                      ).length
+                    }
+                  </strong>
+                  <span>تحتاج متابعة</span>
+                </article>
+                <article>
+                  <small>الدفعات</small>
+                  <strong>{data.cohorts.length}</strong>
+                  <span>ضمن مساحة العمل</span>
+                </article>
+                <article>
+                  <small>المجموعات</small>
+                  <strong>
+                    {data.cohorts.flatMap((cohort) => cohort.groups).length}
+                  </strong>
+                  <span>مجموعات فعالة</span>
+                </article>
+                <article>
+                  <small>الخطط</small>
+                  <strong>
+                    {
+                      data.plans.filter((plan) => plan.status === "PUBLISHED")
+                        .length
+                    }
+                  </strong>
+                  <span>خطط منشورة</span>
+                </article>
+              </section>
+              <JourneyPanel key="today" kind="today" />
+              {data.actor_role === "RESPONSIBLE" && (
+                <SetupGuide data={data} open={setActiveView} />
+              )}
+            </>
+          )}
+          {activeView === "people" && data.actor_role === "RESPONSIBLE" && (
+            <PeopleWorkspace busy={busy} command={command} />
+          )}
+          {activeView === "program" && (
+            <JourneyPanel key="program" kind="program" />
+          )}
+          {activeView === "progress" && (
+            <JourneyPanel key="progress" kind="progress" />
+          )}
+          {activeView === "program" && data.actor_role === "RESPONSIBLE" && (
+            <section className="stats">
+              <article>
+                <strong>{data.templates.length}</strong>
+                <span>قوالب</span>
+              </article>
+              <article>
+                <strong>
+                  {data.plans.filter((p) => p.status === "PUBLISHED").length}
+                </strong>
+                <span>خطط منشورة</span>
+              </article>
+              <article>
+                <strong>{data.cohorts.length}</strong>
+                <span>دفعات</span>
+              </article>
+              <article>
+                <strong>{data.cohorts.flatMap((c) => c.groups).length}</strong>
+                <span>مجموعات</span>
+              </article>
+              <article>
+                <strong>{data.sessions.length}</strong>
+                <span>جلسات</span>
+              </article>
+            </section>
+          )}
+          {activeView === "reports" && data.actor_role === "RESPONSIBLE" && (
+            <ResponsibleCenter />
+          )}
+          {activeView === "program" && data.actor_role === "RESPONSIBLE" && (
+            <section className="workspace-grid">
+              <TemplateForm busy={busy} submit={command} />
+              <PlanForm busy={busy} data={data} submit={command} />
+              <CohortForm busy={busy} data={data} submit={command} />
+            </section>
+          )}
+          {activeView === "program" && data.actor_role === "RESPONSIBLE" && (
+            <DistributionWorkspace
+              busy={busy}
+              cohorts={data.cohorts}
+              command={command}
+            />
+          )}
+          {activeView === "sessions" && data.actor_role !== "STUDENT" && (
+            <SessionWorkspace
+              busy={busy}
+              sessions={data.sessions}
+              command={command}
+            />
+          )}
+          {activeView === "tracking" && (
+            <TrackingWorkspace
+              busy={busy}
+              actorRole={data.actor_role}
+              command={command}
+            />
+          )}
+          {activeView === "learning" && (
+            <LearningWorkspace
+              busy={busy}
+              actorRole={data.actor_role}
+              command={command}
+            />
+          )}
+          {activeView === "followup" && data.actor_role !== "STUDENT" && (
+            <FollowupWorkspace busy={busy} command={command} />
+          )}
+          {activeView === "program" && data.actor_role === "RESPONSIBLE" && (
+            <section className="panel table-panel">
+              <div className="panel-heading">
+                <div>
+                  <span className="section-kicker">السجل</span>
+                  <h2>الدفعات الحالية</h2>
+                </div>
+              </div>
+              {data.cohorts.length ? (
+                <div className="cohort-list">
+                  {data.cohorts.map((c) => (
+                    <article key={c.id}>
+                      <div>
+                        <strong>{c.name}</strong>
+                        <span>
+                          {c.starts_on} — {c.ends_on}
+                        </span>
+                      </div>
+                      <div className="chips">
+                        {c.groups.map((g) => (
+                          <span key={g.id}>{g.name}</span>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="empty">
+                  لا توجد دفعات بعد. ابدأ بقالب ثم انشر خطة.
+                </p>
+              )}
+            </section>
+          )}
+          {activeView === "account" && me && (
+            <section className="panel table-panel account-panel">
+              <div>
+                <span className="section-kicker">الحساب</span>
+                <h2>{me.display_name}</h2>
+              </div>
+              <dl>
+                <div>
+                  <dt>اسم الدخول</dt>
+                  <dd>{me.login_name}</dd>
+                </div>
+                <div>
+                  <dt>الدور</dt>
+                  <dd>{roleLabels[me.role]}</dd>
+                </div>
+                <div>
+                  <dt>الجهة</dt>
+                  <dd>{me.workspace_name}</dd>
+                </div>
+              </dl>
+              <button
+                type="button"
+                onClick={() => {
+                  setMessage("");
+                  setPasswordOptional(true);
+                  setChangeRequired(true);
+                }}
+              >
+                تغيير كلمة المرور
+              </button>
+            </section>
+          )}
+        </div>
+      </section>
+      {paletteOpen && (
+        <div
+          className="palette-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) setPaletteOpen(false);
+          }}
+        >
+          <section
+            className="command-palette"
+            role="dialog"
+            aria-modal="true"
+            aria-label="البحث السريع"
+          >
+            <div className="palette-input">
+              <span aria-hidden="true">⌕</span>
+              <input
+                autoFocus
+                value={paletteQuery}
+                onChange={(event) => setPaletteQuery(event.target.value)}
+                placeholder="ابحث عن صفحة أو إجراء…"
+                aria-label="نص البحث"
+              />
+              <kbd>ESC</kbd>
+            </div>
+            <div className="palette-results">
+              <span className="palette-caption">انتقال سريع</span>
+              {filteredTargets.map((target) => (
+                <button
+                  type="button"
+                  key={target.id}
+                  onClick={() => {
+                    setActiveView(target.view);
+                    setPaletteOpen(false);
+                    setPaletteQuery("");
+                  }}
+                >
+                  <span className="nav-icon">{target.icon}</span>
+                  <span>
+                    <strong>{target.title}</strong>
+                    <small>{target.detail}</small>
+                  </span>
+                  <kbd>↵</kbd>
+                </button>
+              ))}
+              {!filteredTargets.length && (
+                <div className="palette-empty">
+                  لا توجد نتائج مطابقة. جرّب اسم صفحة أو مجموعة أو جلسة.
+                </div>
+              )}
+            </div>
+            <footer>
+              <span>↑↓ للتنقل</span>
+              <span>Enter للاختيار</span>
+              <span>Esc للإغلاق</span>
+            </footer>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
