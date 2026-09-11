@@ -15,8 +15,8 @@
 
 ## Open findings
 
-1. **High before Pilot — legacy HS256 signing.** Current user access tokens require a network call to Supabase Auth for every `getClaims()` verification. Migrate the legacy JWT secret to the signing-key system, rotate to an asymmetric key, issue a fresh test session, and re-run all auth and load gates. Keep the previous key trusted for at least the configured access-token lifetime plus 15 minutes before revocation.
-2. **Critical before Pilot — previously displayed secrets.** Rotate every value shown during setup, update local and Production server-only storage, redeploy, verify login/revocation/readiness, then remove the previous values.
+1. **High before Pilot — previous HS256 key remains trusted.** Fresh-session evidence proves ES256 with a key ID, but the previous legacy signing key remains available because the deployed legacy API key has not been replaced. Replace the legacy API keys before revoking the previous key, then repeat authentication and load gates.
+2. **Critical before Pilot — previously displayed secrets; owner-deferred.** The owner elected to continue pre-data operation with the existing values. Rotate every value shown during setup before storing real personal data, update local and Production server-only storage, redeploy, verify login/revocation/readiness, then remove the previous values.
 3. **High before Pilot — independent review.** A reviewer who did not implement the system must repeat the threat-focused checks for auth bypass, IDOR/workspace escape, stored data exposure, CSRF, injection, session revocation, and audit tampering, and record residual risk.
 
 No open finding may be reclassified as passed without new evidence.
