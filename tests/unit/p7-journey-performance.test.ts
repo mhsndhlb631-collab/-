@@ -38,6 +38,11 @@ describe("P7 journey read round trips", () => {
       groups: [],
       weeks: [],
     });
+    expect(query.mock.calls[1]?.slice(1)).toEqual([
+      actor.workspaceId,
+      actor.workspaceId,
+      actor.workspaceId,
+    ]);
     expect(await service.progress()).toEqual({
       role: "STUDENT",
       tracking_recorded: 2,

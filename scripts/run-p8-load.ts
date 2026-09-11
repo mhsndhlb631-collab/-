@@ -102,7 +102,7 @@ async function timedRead(path: string, cookie: string, expectedRole: string) {
     response.status === 200 && body.role === expectedRole,
     "load request failed",
   );
-  return { path, duration };
+  return { path, role: expectedRole, duration };
 }
 
 try {
@@ -210,7 +210,7 @@ try {
     );
 
   stage = "reference_load";
-  const durations: { path: string; duration: number }[] = [];
+  const durations: { path: string; role: string; duration: number }[] = [];
   for (let round = 0; round < 15; round++) {
     const measured = await Promise.all(
       sessions.map((session, userIndex) => {
@@ -233,6 +233,16 @@ try {
       .map((item) => item.duration);
     report.measurements[`p95_${path.split("/").at(-1)}_ms`] =
       Math.round(percentile(pathDurations, 0.95) * 10) / 10;
+  }
+  for (const role of ["RESPONSIBLE", "MENTOR", "STUDENT"]) {
+    for (const path of paths) {
+      const rolePathDurations = durations
+        .filter((item) => item.role === role && item.path === path)
+        .map((item) => item.duration);
+      report.measurements[
+        `p95_${role.toLowerCase()}_${path.split("/").at(-1)}_ms`
+      ] = Math.round(percentile(rolePathDurations, 0.95) * 10) / 10;
+    }
   }
   prove(durations.length === 300);
   prove(

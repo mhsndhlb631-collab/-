@@ -57,9 +57,9 @@ export class P7JourneyService {
     const rows = await this.tx<
       { cohorts: unknown[]; groups: unknown[]; weeks: unknown[] }[]
     >`select
-      coalesce((select jsonb_agg(to_jsonb(c) order by c.name,c.id) from (select distinct c.id,c.name,c.status from app.cohorts c) c),'[]'::jsonb) cohorts,
-      coalesce((select jsonb_agg(to_jsonb(g) order by g.cohort_name,g.name,g.id) from (select distinct g.id,g.name,c.name cohort_name from app.groups g join app.cohorts c on c.id=g.cohort_id) g),'[]'::jsonb) groups,
-      coalesce((select jsonb_agg(to_jsonb(w) order by w.week_number,w.id) from (select distinct pw.id,pw.week_number,pw.title from app.plan_weeks pw join app.program_plans pp on pp.id=pw.plan_id where pp.status='PUBLISHED') w),'[]'::jsonb) weeks`;
+      coalesce((select jsonb_agg(to_jsonb(c) order by c.name,c.id) from (select c.id,c.name,c.status from app.cohorts c where c.workspace_id=${this.actor.workspaceId}::uuid) c),'[]'::jsonb) cohorts,
+      coalesce((select jsonb_agg(to_jsonb(g) order by g.cohort_name,g.name,g.id) from (select g.id,g.name,c.name cohort_name from app.groups g join app.cohorts c on c.id=g.cohort_id and c.workspace_id=g.workspace_id where g.workspace_id=${this.actor.workspaceId}::uuid) g),'[]'::jsonb) groups,
+      coalesce((select jsonb_agg(to_jsonb(w) order by w.week_number,w.id) from (select pw.id,pw.week_number,pw.title from app.plan_weeks pw join app.program_plans pp on pp.id=pw.plan_id and pp.workspace_id=pw.workspace_id where pw.workspace_id=${this.actor.workspaceId}::uuid and pp.status='PUBLISHED') w),'[]'::jsonb) weeks`;
     return { role: this.actor.role, ...(rows[0] ?? {}) };
   }
 
