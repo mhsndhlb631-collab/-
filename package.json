@@ -39,6 +39,7 @@
     "vercel:configure": "node scripts/configure-vercel.ts"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "@supabase/ssr": "0.12.6",
     "@supabase/supabase-js": "2.116.0",
     "drizzle-orm": "0.45.2",

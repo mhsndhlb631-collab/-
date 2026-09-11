@@ -7,6 +7,8 @@ import { ResponsibleCenter } from "./responsible-center";
 import { JourneyPanel } from "./journey-panel";
 import { PeopleWorkspace } from "./people-workspace";
 import { DistributionWorkspace } from "./distribution-workspace";
+import { PremiumToday } from "./premium-today";
+import { QiwamIcon, type QiwamIconName } from "./qiwam-icon";
 
 type Overview = {
   actor_role: "RESPONSIBLE" | "MENTOR" | "STUDENT";
@@ -89,17 +91,17 @@ const navGroups: { label: string; views: View[] }[] = [
   { label: "الإعدادات", views: ["account"] },
 ];
 
-const viewIcons: Record<View, string> = {
-  today: "⌂",
-  people: "♙",
-  program: "▦",
-  sessions: "◷",
-  tracking: "◎",
-  learning: "◇",
-  followup: "◉",
-  reports: "⌁",
-  progress: "↗",
-  account: "⚙",
+const viewIcons: Record<View, QiwamIconName> = {
+  today: "home",
+  people: "people",
+  program: "program",
+  sessions: "calendar",
+  tracking: "target",
+  learning: "learning",
+  followup: "followup",
+  reports: "reports",
+  progress: "progress",
+  account: "settings",
 };
 
 export function OperationsShell() {
@@ -437,7 +439,9 @@ export function OperationsShell() {
             <label>
               اسم الدخول
               <span className="input-with-icon">
-                <i aria-hidden="true">♙</i>
+                <i aria-hidden="true">
+                  <QiwamIcon name="user" size={18} />
+                </i>
                 <input
                   name="login_name"
                   autoComplete="username"
@@ -449,7 +453,9 @@ export function OperationsShell() {
             <label>
               كلمة المرور
               <span className="input-with-icon">
-                <i aria-hidden="true">◇</i>
+                <i aria-hidden="true">
+                  <QiwamIcon name="settings" size={18} />
+                </i>
                 <input
                   name="password"
                   type={passwordVisible ? "text" : "password"}
@@ -465,7 +471,10 @@ export function OperationsShell() {
                     passwordVisible ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"
                   }
                 >
-                  {passwordVisible ? "◉" : "◎"}
+                  <QiwamIcon
+                    name={passwordVisible ? "check" : "user"}
+                    size={17}
+                  />
                 </button>
               </span>
             </label>
@@ -512,7 +521,7 @@ export function OperationsShell() {
     title: string;
     detail: string;
     view: View;
-    icon: string;
+    icon: QiwamIconName;
   }> = [
     ...allowedViews.map((view) => ({
       id: `view-${view}`,
@@ -526,7 +535,7 @@ export function OperationsShell() {
       title: cohort.name,
       detail: "دفعة في البرنامج",
       view: "program" as View,
-      icon: "▦",
+      icon: "program" as QiwamIconName,
     })),
     ...data.cohorts.flatMap((cohort) =>
       cohort.groups.map((group) => ({
@@ -534,7 +543,7 @@ export function OperationsShell() {
         title: group.name,
         detail: `مجموعة · ${cohort.name}`,
         view: "program" as View,
-        icon: "◫",
+        icon: "people" as QiwamIconName,
       })),
     ),
     ...data.sessions.map((session) => ({
@@ -542,7 +551,7 @@ export function OperationsShell() {
       title: session.name,
       detail: `جلسة · ${session.group_name}`,
       view: "sessions" as View,
-      icon: "◷",
+      icon: "calendar" as QiwamIconName,
     })),
   ];
   const normalizedQuery = paletteQuery.trim().toLocaleLowerCase("ar");
@@ -576,7 +585,7 @@ export function OperationsShell() {
             onClick={() => setMobileNavOpen(false)}
             aria-label="إغلاق القائمة"
           >
-            ×
+            <QiwamIcon name="close" size={18} />
           </button>
         </div>
         <button
@@ -584,7 +593,7 @@ export function OperationsShell() {
           type="button"
           onClick={() => setPaletteOpen(true)}
         >
-          <span aria-hidden="true">⌕</span>
+          <QiwamIcon name="search" size={18} weight="light" />
           <span className="sidebar-label">بحث سريع</span>
           <kbd className="sidebar-label">Ctrl K</kbd>
         </button>
@@ -611,7 +620,11 @@ export function OperationsShell() {
                     }}
                   >
                     <span className="nav-icon" aria-hidden="true">
-                      {viewIcons[view]}
+                      <QiwamIcon
+                        name={viewIcons[view]}
+                        size={20}
+                        weight={activeView === view ? "bold" : "regular"}
+                      />
                     </span>
                     <span className="sidebar-label">{viewLabels[view]}</span>
                   </button>
@@ -634,7 +647,9 @@ export function OperationsShell() {
               <strong>{me?.display_name}</strong>
               <small>{roleLabels[data.actor_role]}</small>
             </span>
-            <span className="sidebar-label">⌄</span>
+            <span className="sidebar-label">
+              <QiwamIcon name="caret-down" size={14} />
+            </span>
           </button>
           {profileOpen && (
             <div className="profile-menu">
@@ -664,7 +679,12 @@ export function OperationsShell() {
               sidebarCollapsed ? "توسيع الشريط الجانبي" : "طي الشريط الجانبي"
             }
           >
-            <span aria-hidden="true">{sidebarCollapsed ? "‹" : "›"}</span>
+            <span aria-hidden="true">
+              <QiwamIcon
+                name={sidebarCollapsed ? "caret-left" : "caret-right"}
+                size={17}
+              />
+            </span>
             <span className="sidebar-label">طي القائمة</span>
           </button>
         </div>
@@ -686,7 +706,7 @@ export function OperationsShell() {
               onClick={() => setMobileNavOpen(true)}
               aria-label="فتح القائمة"
             >
-              ☰
+              <QiwamIcon name="menu" size={20} />
             </button>
             <div>
               <div className="breadcrumbs">
@@ -703,7 +723,7 @@ export function OperationsShell() {
               type="button"
               onClick={() => setPaletteOpen(true)}
             >
-              <span>⌕</span>
+              <QiwamIcon name="search" size={18} weight="light" />
               <span>ابحث في قِوام…</span>
               <kbd>Ctrl K</kbd>
             </button>
@@ -715,7 +735,11 @@ export function OperationsShell() {
                 theme === "dark" ? "تفعيل الوضع الفاتح" : "تفعيل الوضع الداكن"
               }
             >
-              {theme === "dark" ? "☀" : "☾"}
+              <QiwamIcon
+                name={theme === "dark" ? "sun" : "moon"}
+                size={18}
+                weight="light"
+              />
             </button>
             <button
               className="icon-button notification-button"
@@ -724,7 +748,8 @@ export function OperationsShell() {
               aria-expanded={notificationsOpen}
               onClick={() => setNotificationsOpen((value) => !value)}
             >
-              ♢<i />
+              <QiwamIcon name="bell" size={18} weight="light" />
+              <i />
             </button>
             {notificationsOpen && (
               <section
@@ -739,7 +764,9 @@ export function OperationsShell() {
                   <span>الكل مقروء</span>
                 </header>
                 <div className="notification-empty">
-                  <b aria-hidden="true">♢</b>
+                  <b aria-hidden="true">
+                    <QiwamIcon name="bell" size={24} weight="duotone" />
+                  </b>
                   <strong>لا توجد إشعارات جديدة</strong>
                   <small>ستظهر هنا التنبيهات التي تحتاج تدخلك.</small>
                 </div>
@@ -758,7 +785,9 @@ export function OperationsShell() {
         </header>
         {message && (
           <div className="toast-notice" role="status">
-            <span aria-hidden="true">✓</span>
+            <span aria-hidden="true">
+              <QiwamIcon name="check" size={16} weight="bold" />
+            </span>
             <div>
               <strong>تحديث المنصة</strong>
               <p>{message}</p>
@@ -768,96 +797,18 @@ export function OperationsShell() {
               onClick={() => setMessage("")}
               aria-label="إغلاق الرسالة"
             >
-              ×
+              <QiwamIcon name="close" size={15} />
             </button>
           </div>
         )}
         <div id="workspace-content" className="workspace-content" tabIndex={-1}>
           {activeView === "today" && (
-            <>
-              <section className="today-welcome">
-                <div>
-                  <span className="section-kicker">مساحة العمل اليوم</span>
-                  <h2>{me ? `أهلًا ${me.display_name}` : "أهلًا بك"}</h2>
-                  <p>
-                    تابع الجلسات والطلاب والخطوات التي تحتاج انتباهك من مكان
-                    واحد.
-                  </p>
-                </div>
-                <div className="quick-actions" aria-label="إجراءات سريعة">
-                  {data.actor_role === "RESPONSIBLE" && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveView("people")}
-                    >
-                      <span>＋</span>إضافة طالب
-                    </button>
-                  )}
-                  {data.actor_role !== "STUDENT" && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveView("sessions")}
-                    >
-                      <span>◷</span>فتح جلسة
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => setActiveView("learning")}
-                  >
-                    <span>◇</span>إضافة تكليف
-                  </button>
-                </div>
-              </section>
-              <section
-                className="stats dashboard-stats"
-                aria-label="ملخص اليوم"
-              >
-                <article>
-                  <small>الجلسات</small>
-                  <strong>{data.sessions.length}</strong>
-                  <span>إجمالي الجلسات</span>
-                </article>
-                <article>
-                  <small>جلسات مفتوحة</small>
-                  <strong>
-                    {
-                      data.sessions.filter(
-                        (session) => session.status === "OPEN",
-                      ).length
-                    }
-                  </strong>
-                  <span>تحتاج متابعة</span>
-                </article>
-                <article>
-                  <small>الدفعات</small>
-                  <strong>{data.cohorts.length}</strong>
-                  <span>ضمن مساحة العمل</span>
-                </article>
-                <article>
-                  <small>المجموعات</small>
-                  <strong>
-                    {data.cohorts.flatMap((cohort) => cohort.groups).length}
-                  </strong>
-                  <span>مجموعات فعالة</span>
-                </article>
-                <article>
-                  <small>الخطط</small>
-                  <strong>
-                    {
-                      data.plans.filter((plan) => plan.status === "PUBLISHED")
-                        .length
-                    }
-                  </strong>
-                  <span>خطط منشورة</span>
-                </article>
-              </section>
-              <JourneyPanel key="today" kind="today" />
-              {data.actor_role === "RESPONSIBLE" && (
-                <SetupGuide data={data} open={setActiveView} />
-              )}
-            </>
+            <PremiumToday
+              data={data}
+              role={data.actor_role}
+              displayName={me?.display_name ?? "مستخدم قِوام"}
+              open={setActiveView}
+            />
           )}
           {activeView === "people" && data.actor_role === "RESPONSIBLE" && (
             <PeopleWorkspace busy={busy} command={command} />
@@ -1017,7 +968,7 @@ export function OperationsShell() {
             aria-label="البحث السريع"
           >
             <div className="palette-input">
-              <span aria-hidden="true">⌕</span>
+              <QiwamIcon name="search" size={20} weight="light" />
               <input
                 autoFocus
                 value={paletteQuery}
@@ -1039,7 +990,9 @@ export function OperationsShell() {
                     setPaletteQuery("");
                   }}
                 >
-                  <span className="nav-icon">{target.icon}</span>
+                  <span className="nav-icon">
+                    <QiwamIcon name={target.icon} size={20} />
+                  </span>
                   <span>
                     <strong>{target.title}</strong>
                     <small>{target.detail}</small>
@@ -1062,90 +1015,6 @@ export function OperationsShell() {
         </div>
       )}
     </main>
-  );
-}
-function SetupGuide({
-  data,
-  open,
-}: {
-  data: Overview;
-  open: (view: View) => void;
-}) {
-  const [personCount, setPersonCount] = useState(0);
-  useEffect(() => {
-    void fetch("/api/v1/people", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((result: { students?: unknown[]; mentors?: unknown[] } | null) => {
-        if (result)
-          setPersonCount(
-            (result.students?.length ?? 0) + (result.mentors?.length ?? 0),
-          );
-      });
-  }, []);
-  const steps: Array<{
-    label: string;
-    detail: string;
-    done: boolean;
-    view: View;
-    action: string;
-  }> = [
-    {
-      label: "أضف الطلاب والمربين",
-      detail: "أنشئ ملفات الطلاب وحسابات المربين.",
-      done: personCount > 0,
-      view: "people",
-      action: "إدارة الأشخاص",
-    },
-    {
-      label: "جهّز البرنامج",
-      detail: "أنشئ القالب والخطة بما فيها اللقاء والتكاليف.",
-      done: data.plans.some((plan) => plan.status === "PUBLISHED"),
-      view: "program",
-      action: "تجهيز البرنامج",
-    },
-    {
-      label: "أطلق الدفعة ووزّع المجموعة",
-      detail: "حدد المواعيد ثم اربط الطلاب والمربي.",
-      done: data.cohorts.length > 0,
-      view: "program",
-      action: "إطلاق دفعة",
-    },
-    {
-      label: "افتح أول جلسة",
-      detail: "سجل الحضور والأدب والتفاعل ثم أغلق اللقاء.",
-      done: data.sessions.some((session) => session.status !== "PLANNED"),
-      view: "sessions",
-      action: "فتح الجلسات",
-    },
-  ];
-  return (
-    <section className="setup-guide" aria-labelledby="setup-title">
-      <div className="setup-copy">
-        <span className="section-kicker">بداية التشغيل</span>
-        <h2 id="setup-title">جهّز أول مجموعة في أربع خطوات</h2>
-        <p>نفّذها بالترتيب، وستظهر الجلسات والتكاليف تلقائيًا لكل دور.</p>
-      </div>
-      <ol>
-        {steps.map((step, index) => (
-          <li key={step.label} className={step.done ? "is-complete" : ""}>
-            <span className="step-number" aria-hidden="true">
-              {step.done ? "✓" : index + 1}
-            </span>
-            <div>
-              <strong>{step.label}</strong>
-              <small>{step.detail}</small>
-            </div>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => open(step.view)}
-            >
-              {step.action}
-            </button>
-          </li>
-        ))}
-      </ol>
-    </section>
   );
 }
 type FormProps = {
