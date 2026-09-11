@@ -15,6 +15,9 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 function canOperate(actor: RequestActor) {
   if (actor.role === "STUDENT") throw new AppError("FORBIDDEN");
 }
+function responsible(actor: RequestActor) {
+  if (actor.role !== "RESPONSIBLE") throw new AppError("FORBIDDEN");
+}
 function number(value: unknown) {
   return Number(value);
 }
@@ -27,36 +30,160 @@ export class P4LearningService {
   ) {}
 
   async overview() {
-    const [content, assignments, exams, enrollments] = await Promise.all([
-      this
-        .tx`select ci.id,ci.title,ci.body,ci.published_at,pw.id week_id,pw.week_number,pw.title week_title
+    const [content, assignments, exams, enrollments, weeks] = await Promise.all(
+      [
+        this
+          .tx`select ci.id,ci.title,ci.body,ci.published_at,pw.id week_id,pw.week_number,pw.title week_title
         from app.content_items ci join app.plan_weeks pw on pw.id=ci.plan_week_id order by pw.week_number,ci.title`,
-      this
-        .tx`select ad.id,ad.title,ad.instructions,ad.due_day_offset,ad.max_score,ad.weight,pw.id week_id,pw.week_number,
+        this
+          .tx`select ad.id,ad.title,ad.instructions,ad.due_day_offset,ad.max_score,ad.weight,pw.id week_id,pw.week_number,
         coalesce(json_agg(json_build_object('id',s.id,'enrollment_id',s.enrollment_id,'answer',s.answer,'status',s.status,
         'score',s.score,'student_feedback',case when ${this.actor.role}='STUDENT' and s.feedback_published_at is null then null else s.student_feedback end,
         'row_version',s.row_version)) filter(where s.id is not null),'[]') submissions
         from app.assignment_definitions ad join app.plan_weeks pw on pw.id=ad.plan_week_id
         left join app.assignment_submissions s on s.assignment_definition_id=ad.id group by ad.id,pw.id order by pw.week_number,ad.title`,
-      this
-        .tx`select ed.id,ed.title,ed.day_offset,ed.max_score,ed.weight,pw.id week_id,pw.week_number,
+        this
+          .tx`select ed.id,ed.title,ed.day_offset,ed.max_score,ed.weight,pw.id week_id,pw.week_number,
         coalesce(json_agg(json_build_object('id',r.id,'enrollment_id',r.enrollment_id,'score',r.score,'status',r.status,
         'student_feedback',case when ${this.actor.role}='STUDENT' and r.status<>'PUBLISHED' then null else r.student_feedback end,
         'row_version',r.row_version)) filter(where r.id is not null),'[]') results
         from app.exam_definitions ed join app.plan_weeks pw on pw.id=ed.plan_week_id
         left join app.exam_results r on r.exam_definition_id=ed.id group by ed.id,pw.id order by pw.week_number,ed.title`,
-      this
-        .tx`select e.id enrollment_id,sp.id student_id,p.display_name,c.id cohort_id,c.current_plan_id
+        this
+          .tx`select e.id enrollment_id,sp.id student_id,p.display_name,c.id cohort_id,c.current_plan_id
         from app.enrollments e join app.student_profiles sp on sp.id=e.student_profile_id join app.persons p on p.id=sp.person_id
         join app.cohorts c on c.id=e.cohort_id where e.workspace_id=${this.actor.workspaceId}::uuid order by p.display_name`,
-    ]);
+        this.tx`select pw.id,pw.week_number,pw.title,c.name cohort_name
+        from app.plan_weeks pw join app.program_plans pp on pp.id=pw.plan_id
+        join app.cohorts c on c.current_plan_id=pp.id
+        where c.workspace_id=${this.actor.workspaceId}::uuid and c.status='ACTIVE'
+        order by c.starts_on desc,pw.week_number,pw.id`,
+      ],
+    );
     return {
       actor_role: this.actor.role,
       content,
       assignments,
       exams,
       enrollments,
+      weeks,
     };
+  }
+
+  createContent(value: unknown, idempotencyKey: unknown) {
+    responsible(this.actor);
+    const body = parse(
+      z
+        .object({
+          week_id: id,
+          title: z.string().trim().min(1).max(160),
+          body: z.string().trim().min(1).max(10000),
+        })
+        .strict(),
+      value,
+    );
+    const stableKey = parse(key, idempotencyKey);
+    return idempotent({
+      tx: this.tx,
+      actor: this.actor,
+      command: "P4_CREATE_CONTENT",
+      key: stableKey,
+      payload: body,
+      work: async () => {
+        const resourceId = randomUUID();
+        await this
+          .tx`insert into app.content_items(id,workspace_id,plan_week_id,title,body)
+        values(${resourceId}::uuid,${this.actor.workspaceId}::uuid,${body.week_id}::uuid,${body.title},${body.body})`;
+        await audit(
+          this.tx,
+          this.actor,
+          this.requestId,
+          "CONTENT_CREATED",
+          "content_item",
+          resourceId,
+        );
+        return { id: resourceId };
+      },
+    });
+  }
+
+  createAssignment(value: unknown, idempotencyKey: unknown) {
+    responsible(this.actor);
+    const body = parse(
+      z
+        .object({
+          week_id: id,
+          title: z.string().trim().min(1).max(160),
+          instructions: z.string().trim().min(1).max(5000),
+          due_day_offset: z.number().int().min(0).max(6),
+          max_score: z.number().positive().max(100000),
+          weight: z.number().min(0).max(1000),
+        })
+        .strict(),
+      value,
+    );
+    const stableKey = parse(key, idempotencyKey);
+    return idempotent({
+      tx: this.tx,
+      actor: this.actor,
+      command: "P4_CREATE_ASSIGNMENT",
+      key: stableKey,
+      payload: body,
+      work: async () => {
+        const resourceId = randomUUID();
+        await this
+          .tx`insert into app.assignment_definitions(id,workspace_id,plan_week_id,title,instructions,due_day_offset,max_score,weight)
+        values(${resourceId}::uuid,${this.actor.workspaceId}::uuid,${body.week_id}::uuid,${body.title},${body.instructions},${body.due_day_offset},${body.max_score},${body.weight})`;
+        await audit(
+          this.tx,
+          this.actor,
+          this.requestId,
+          "ASSIGNMENT_CREATED",
+          "assignment_definition",
+          resourceId,
+        );
+        return { id: resourceId };
+      },
+    });
+  }
+
+  createExam(value: unknown, idempotencyKey: unknown) {
+    responsible(this.actor);
+    const body = parse(
+      z
+        .object({
+          week_id: id,
+          title: z.string().trim().min(1).max(160),
+          day_offset: z.number().int().min(0).max(6),
+          max_score: z.number().positive().max(100000),
+          weight: z.number().min(0).max(1000),
+        })
+        .strict(),
+      value,
+    );
+    const stableKey = parse(key, idempotencyKey);
+    return idempotent({
+      tx: this.tx,
+      actor: this.actor,
+      command: "P4_CREATE_EXAM",
+      key: stableKey,
+      payload: body,
+      work: async () => {
+        const resourceId = randomUUID();
+        await this
+          .tx`insert into app.exam_definitions(id,workspace_id,plan_week_id,title,day_offset,max_score,weight)
+        values(${resourceId}::uuid,${this.actor.workspaceId}::uuid,${body.week_id}::uuid,${body.title},${body.day_offset},${body.max_score},${body.weight})`;
+        await audit(
+          this.tx,
+          this.actor,
+          this.requestId,
+          "EXAM_CREATED",
+          "exam_definition",
+          resourceId,
+        );
+        return { id: resourceId };
+      },
+    });
   }
 
   publishContent(contentId: unknown, idempotencyKey: unknown) {

@@ -14,6 +14,281 @@
 .learning-panel {
   margin-top: 1.5rem;
 }
+.people-workspace,
+.setup-guide {
+  max-width: 1200px;
+  margin-inline: auto;
+}
+.workspace-hero,
+.setup-guide {
+  color: #fff;
+  background: linear-gradient(135deg, #113e34, #1f6e59);
+  border-radius: 22px;
+  padding: clamp(1.25rem, 3vw, 2rem);
+}
+.workspace-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.workspace-hero h2,
+.setup-guide h2 {
+  margin: 0.25rem 0;
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+}
+.workspace-hero p,
+.setup-guide p {
+  margin: 0;
+  color: #dcece7;
+}
+.hero-counts {
+  display: flex;
+  gap: 0.6rem;
+}
+.hero-counts span {
+  display: grid;
+  min-width: 88px;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  color: #eaf4f1;
+  background: #ffffff12;
+  border: 1px solid #ffffff2d;
+  border-radius: 14px;
+}
+.hero-counts strong {
+  font-size: 1.5rem;
+  color: #f3d398;
+}
+.people-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.4fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.people-layout h3,
+.distribution-grid h3,
+.learning-create h3 {
+  margin: 0.35rem 0;
+}
+.optional {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.8rem;
+  background: #eef4f0;
+  border-radius: 11px;
+}
+.check-row input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--green);
+}
+.segmented {
+  display: flex;
+  gap: 0.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.segmented button.active {
+  background: var(--green);
+}
+.segmented button span {
+  margin-inline-start: 0.35rem;
+  opacity: 0.8;
+}
+.people-list {
+  display: grid;
+}
+.person-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.person-row:last-child {
+  border-bottom: 0;
+}
+.person-row > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.person-row small {
+  color: var(--muted);
+}
+.person-avatar {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  color: var(--green);
+  background: #dfece6;
+  border-radius: 50%;
+  font-weight: 800;
+}
+.person-status {
+  padding: 0.3rem 0.55rem;
+  color: #78592a;
+  background: #f7ead3;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.person-status.is-active {
+  color: var(--green);
+  background: #dcebe4;
+}
+.illustrated-empty,
+.action-empty {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1.25rem;
+  margin-top: 1rem;
+  color: var(--ink);
+  background: #f7f2e6;
+  border: 1px dashed #d4c7a9;
+  border-radius: 14px;
+}
+.illustrated-empty p,
+.action-empty p {
+  margin: 0;
+  color: var(--muted);
+}
+.credential-card {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 1.2rem;
+  color: #24483e;
+  background: #edf7f2;
+  border: 1px solid #afd3c3;
+  border-radius: 16px;
+}
+.credential-card p {
+  margin: 0.25rem 0 0;
+}
+.credential-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin: 0;
+}
+.credential-card dl div {
+  min-width: 0;
+  padding: 0.75rem;
+  background: #fff;
+  border-radius: 10px;
+}
+.credential-card dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.credential-card dd {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+.row-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.setup-guide {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.28fr);
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+.setup-guide ol {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.setup-guide li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem;
+  color: var(--ink);
+  background: #fffdf8;
+  border-radius: 13px;
+}
+.setup-guide li > div {
+  display: grid;
+}
+.setup-guide li small {
+  color: var(--muted);
+}
+.step-number {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: #fff;
+  background: var(--gold);
+  border-radius: 50%;
+  font-weight: 800;
+}
+.setup-guide li.is-complete .step-number {
+  background: var(--green2);
+}
+.distribution-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.distribution-grid form {
+  padding: 1rem;
+  background: #fffefa;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.learning-create {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  padding: 1rem;
+  background: #f0f5f2;
+  border-radius: 16px;
+}
+.learning-create > div p {
+  margin: 0;
+  color: var(--muted);
+}
+.learning-create details {
+  padding: 0.8rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.learning-create summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+.compact-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.8rem;
+}
+.student-filter {
+  max-width: 380px;
+  margin: 1rem 0;
+}
+.empty-inline {
+  color: var(--muted);
+}
 .learning-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -411,6 +686,31 @@ label {
 .roster-grid h3 {
   margin-top: 0;
 }
+.closed-roster {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-top: 1rem;
+}
+.closed-roster article {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.closed-roster article span,
+.closed-roster article small {
+  color: var(--muted);
+}
+.success-banner {
+  grid-column: 1/-1;
+  margin: 0;
+  padding: 0.8rem;
+  color: var(--green);
+  background: #e3f1ea;
+  border-radius: 12px;
+}
 .secondary {
   background: #e4eee9;
   color: var(--green);
@@ -557,7 +857,15 @@ label {
   margin-top: 0.75rem;
 }
 @media (max-width: 800px) {
+  .people-layout,
+  .setup-guide,
+  .distribution-grid {
+    grid-template-columns: 1fr;
+  }
   .roster-grid {
+    grid-template-columns: 1fr;
+  }
+  .closed-roster {
     grid-template-columns: 1fr;
   }
   .tracking-grid {
@@ -605,6 +913,24 @@ label {
   }
 }
 @media (max-width: 480px) {
+  .workspace-hero,
+  .person-row,
+  .setup-guide li {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+  .workspace-hero {
+    flex-direction: column;
+  }
+  .hero-counts,
+  .credential-card dl,
+  .compact-form {
+    grid-template-columns: 1fr;
+  }
+  .hero-counts {
+    display: grid;
+    width: 100%;
+  }
   .dashboard {
     padding: 0.75rem;
   }

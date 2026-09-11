@@ -39,15 +39,26 @@ const values = {
   }),
   SUPABASE_URL: required("SUPABASE_URL"),
   SUPABASE_PUBLISHABLE_KEY: required("SUPABASE_PUBLISHABLE_KEY"),
+  SUPABASE_SECRET_KEY: required("SUPABASE_SECRET_KEY"),
   AUTH_INTERNAL_EMAIL_DOMAIN: required("AUTH_INTERNAL_EMAIL_DOMAIN"),
   AUTH_RATE_LIMIT_SECRET: required("AUTH_RATE_LIMIT_SECRET"),
 };
 
 for (const [name, value] of Object.entries(values)) {
-  vercel(["env", "add", name, "production", "--force"], `${value}\n`);
+  vercel(
+    [
+      "env",
+      "add",
+      name,
+      "production",
+      "--force",
+      ...(name === "SUPABASE_SECRET_KEY" ? ["--sensitive"] : []),
+    ],
+    `${value}\n`,
+  );
   console.log(`configured ${name}`);
 }
-for (const name of ["MIGRATION_DATABASE_URL", "SUPABASE_SECRET_KEY"]) {
+for (const name of ["MIGRATION_DATABASE_URL"]) {
   vercel(["env", "rm", name, "production", "--yes"]);
   console.log(`removed ${name}`);
 }

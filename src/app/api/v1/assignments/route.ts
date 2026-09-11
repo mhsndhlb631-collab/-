@@ -1,4 +1,4 @@
-import { p4Query } from "../../../../server/p4-http";
+import { p4Command, p4Query } from "../../../../server/p4-http";
 export const dynamic = "force-dynamic";
 export function GET(request: Request) {
   return p4Query(request, async (service) => {
@@ -9,4 +9,9 @@ export function GET(request: Request) {
       enrollments: data.enrollments,
     };
   });
+}
+export function POST(request: Request) {
+  return p4Command(request, (service, body, key) =>
+    service.createAssignment(body, key),
+  );
 }

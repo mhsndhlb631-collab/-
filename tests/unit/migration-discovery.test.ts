@@ -46,11 +46,12 @@ describe("migration discovery (production runner contract)", () => {
     const files = (await readdir("db/migrations"))
       .filter((n) => PRODUCTION_RUNNER_REGEX.test(n))
       .sort();
-    const tail = files.slice(-3);
+    const tail = files.slice(-4);
     expect(tail).toEqual([
       "0029_p6_reporting_security.sql",
       "0030_p7_self_service_auth.sql",
       "0031_scope_read_indexes.sql",
+      "0032_responsible_people_management.sql",
     ]);
   });
 });

@@ -5,6 +5,8 @@ import { LearningWorkspace } from "./learning-workspace";
 import { FollowupWorkspace } from "./followup-workspace";
 import { ResponsibleCenter } from "./responsible-center";
 import { JourneyPanel } from "./journey-panel";
+import { PeopleWorkspace } from "./people-workspace";
+import { DistributionWorkspace } from "./distribution-workspace";
 
 type Overview = {
   actor_role: "RESPONSIBLE" | "MENTOR" | "STUDENT";
@@ -50,6 +52,7 @@ type Me = {
 };
 type View =
   | "today"
+  | "people"
   | "program"
   | "sessions"
   | "tracking"
@@ -60,10 +63,11 @@ type View =
   | "account";
 const viewLabels: Record<View, string> = {
   today: "اليوم",
-  program: "البرنامج",
+  people: "الطلاب والمربون",
+  program: "البرنامج والمجموعات",
   sessions: "الجلسات",
   tracking: "التتبع",
-  learning: "التعلم",
+  learning: "التعلم والتكاليف",
   followup: "المتابعة",
   reports: "التقارير",
   progress: "التقدم",
@@ -357,6 +361,7 @@ export function OperationsShell() {
     data.actor_role === "RESPONSIBLE"
       ? [
           "today",
+          "people",
           "reports",
           "program",
           "sessions",
@@ -419,7 +424,17 @@ export function OperationsShell() {
         </p>
       )}
       <div id="workspace-content" tabIndex={-1}>
-        {activeView === "today" && <JourneyPanel key="today" kind="today" />}
+        {activeView === "today" && (
+          <>
+            <JourneyPanel key="today" kind="today" />
+            {data.actor_role === "RESPONSIBLE" && (
+              <SetupGuide data={data} open={setActiveView} />
+            )}
+          </>
+        )}
+        {activeView === "people" && data.actor_role === "RESPONSIBLE" && (
+          <PeopleWorkspace busy={busy} command={command} />
+        )}
         {activeView === "program" && (
           <JourneyPanel key="program" kind="program" />
         )}
@@ -461,6 +476,13 @@ export function OperationsShell() {
             <PlanForm busy={busy} data={data} submit={command} />
             <CohortForm busy={busy} data={data} submit={command} />
           </section>
+        )}
+        {activeView === "program" && data.actor_role === "RESPONSIBLE" && (
+          <DistributionWorkspace
+            busy={busy}
+            cohorts={data.cohorts}
+            command={command}
+          />
         )}
         {activeView === "sessions" && data.actor_role !== "STUDENT" && (
           <SessionWorkspace
@@ -553,6 +575,90 @@ export function OperationsShell() {
         )}
       </div>
     </main>
+  );
+}
+function SetupGuide({
+  data,
+  open,
+}: {
+  data: Overview;
+  open: (view: View) => void;
+}) {
+  const [personCount, setPersonCount] = useState(0);
+  useEffect(() => {
+    void fetch("/api/v1/people", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((result: { students?: unknown[]; mentors?: unknown[] } | null) => {
+        if (result)
+          setPersonCount(
+            (result.students?.length ?? 0) + (result.mentors?.length ?? 0),
+          );
+      });
+  }, []);
+  const steps: Array<{
+    label: string;
+    detail: string;
+    done: boolean;
+    view: View;
+    action: string;
+  }> = [
+    {
+      label: "أضف الطلاب والمربين",
+      detail: "أنشئ ملفات الطلاب وحسابات المربين.",
+      done: personCount > 0,
+      view: "people",
+      action: "إدارة الأشخاص",
+    },
+    {
+      label: "جهّز البرنامج",
+      detail: "أنشئ القالب والخطة بما فيها اللقاء والتكاليف.",
+      done: data.plans.some((plan) => plan.status === "PUBLISHED"),
+      view: "program",
+      action: "تجهيز البرنامج",
+    },
+    {
+      label: "أطلق الدفعة ووزّع المجموعة",
+      detail: "حدد المواعيد ثم اربط الطلاب والمربي.",
+      done: data.cohorts.length > 0,
+      view: "program",
+      action: "إطلاق دفعة",
+    },
+    {
+      label: "افتح أول جلسة",
+      detail: "سجل الحضور والأدب والتفاعل ثم أغلق اللقاء.",
+      done: data.sessions.some((session) => session.status !== "PLANNED"),
+      view: "sessions",
+      action: "فتح الجلسات",
+    },
+  ];
+  return (
+    <section className="setup-guide" aria-labelledby="setup-title">
+      <div className="setup-copy">
+        <span className="section-kicker">بداية التشغيل</span>
+        <h2 id="setup-title">جهّز أول مجموعة في أربع خطوات</h2>
+        <p>نفّذها بالترتيب، وستظهر الجلسات والتكاليف تلقائيًا لكل دور.</p>
+      </div>
+      <ol>
+        {steps.map((step, index) => (
+          <li key={step.label} className={step.done ? "is-complete" : ""}>
+            <span className="step-number" aria-hidden="true">
+              {step.done ? "✓" : index + 1}
+            </span>
+            <div>
+              <strong>{step.label}</strong>
+              <small>{step.detail}</small>
+            </div>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => open(step.view)}
+            >
+              {step.action}
+            </button>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 type FormProps = {
@@ -836,7 +942,9 @@ type SessionDetail = {
       definition_id: string;
       name: string;
       value_type: string;
+      constraints: { min?: number; max?: number; options?: string[] };
       required: boolean;
+      applies_to: string[];
       value: unknown;
       row_version: number | null;
     }[];
@@ -872,6 +980,15 @@ function SessionWorkspace({
         <span className="muted">حفظ جزئي ثم إغلاق</span>
       </div>
       <div className="session-tabs">
+        {!sessions.length && (
+          <div className="action-empty">
+            <strong>لا توجد جلسات بعد</strong>
+            <p>
+              أنشئ قالبًا وخطة، ثم أطلق دفعة؛ سيولّد النظام مواعيد الجلسات
+              تلقائيًا.
+            </p>
+          </div>
+        )}
         {sessions.map((s) => (
           <button
             className="secondary"
@@ -879,7 +996,25 @@ function SessionWorkspace({
             onClick={() => void openDetail(s.id)}
           >
             {s.name} · {s.group_name}
-            <small>{s.status}</small>
+            <small>
+              {attendanceLabels[s.status] ??
+                (
+                  {
+                    PLANNED: "مخططة",
+                    OPEN: "مفتوحة",
+                    CLOSED: "مغلقة",
+                    CANCELLED: "ملغاة",
+                  } as Record<string, string>
+                )[s.status] ??
+                s.status}
+              {" · "}
+              {new Intl.DateTimeFormat("ar-EG", {
+                day: "numeric",
+                month: "short",
+                hour: "numeric",
+                minute: "2-digit",
+              }).format(new Date(s.starts_at))}
+            </small>
           </button>
         ))}
       </div>
@@ -910,7 +1045,7 @@ function SessionWorkspace({
               </button>
             )}
           </div>
-          {detail.session.status !== "PLANNED" && (
+          {detail.session.status === "OPEN" && (
             <form
               className="roster-grid"
               onSubmit={(e) => {
@@ -956,63 +1091,133 @@ function SessionWorkspace({
               }}
             >
               {detail.roster.map((r) => (
-                <article key={r.id}>
-                  <h3>{r.display_name}</h3>
-                  <label>
-                    الحضور
-                    <select
-                      name={`a-${r.id}`}
-                      defaultValue={r.attendance_status}
-                    >
-                      <option value="NOT_RECORDED" disabled>
-                        لم يسجل
-                      </option>
-                      <option value="PRESENT">حاضر</option>
-                      <option value="LATE">متأخر</option>
-                      <option value="EXCUSED_ABSENCE">غائب بعذر</option>
-                      <option value="UNEXCUSED_ABSENCE">غائب بلا عذر</option>
-                    </select>
-                  </label>
-                  <label>
-                    سبب الغياب
-                    <input
-                      name={`reason-${r.id}`}
-                      defaultValue={r.reason ?? ""}
-                    />
-                  </label>
-                  {r.metrics.map((m) => (
-                    <label key={m.definition_id}>
-                      {m.name}
-                      {m.required && " *"}
-                      <input
-                        name={`m-${r.id}-${m.definition_id}`}
-                        type={
-                          [
-                            "COUNT",
-                            "PERCENT",
-                            "SCORE",
-                            "DURATION",
-                            "NUMBER",
-                          ].includes(m.value_type)
-                            ? "number"
-                            : "text"
-                        }
-                        defaultValue={
-                          typeof m.value === "string" ||
-                          typeof m.value === "number"
-                            ? m.value
-                            : ""
-                        }
-                      />
-                    </label>
-                  ))}
-                </article>
+                <RosterFields key={r.id} row={r} />
               ))}
               <button disabled={busy}>حفظ السجل</button>
             </form>
           )}
+          {detail.session.status === "CLOSED" && (
+            <div className="closed-roster">
+              <p className="success-banner">أُغلقت الجلسة وحُفظ سجلها.</p>
+              {detail.roster.map((row) => (
+                <article key={row.id}>
+                  <strong>{row.display_name}</strong>
+                  <span>
+                    {attendanceLabels[row.attendance_status] ??
+                      row.attendance_status}
+                  </span>
+                  {row.metrics.map((metric) => (
+                    <small key={metric.definition_id}>
+                      {metric.name}: {String(metric.value ?? "—")}
+                    </small>
+                  ))}
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </section>
+  );
+}
+
+const attendanceLabels: Record<string, string> = {
+  NOT_RECORDED: "لم يسجل",
+  PRESENT: "حاضر",
+  LATE: "متأخر",
+  EXCUSED_ABSENCE: "غائب بعذر",
+  UNEXCUSED_ABSENCE: "غائب بلا عذر",
+};
+function RosterFields({ row }: { row: SessionDetail["roster"][number] }) {
+  const [attendance, setAttendance] = useState(row.attendance_status);
+  const absent = ["EXCUSED_ABSENCE", "UNEXCUSED_ABSENCE"].includes(attendance);
+  return (
+    <article>
+      <h3>{row.display_name}</h3>
+      <label>
+        الحضور
+        <select
+          name={`a-${row.id}`}
+          value={attendance}
+          onChange={(event) => setAttendance(event.target.value)}
+          required
+        >
+          <option value="NOT_RECORDED" disabled>
+            لم يسجل
+          </option>
+          <option value="PRESENT">حاضر</option>
+          <option value="LATE">متأخر</option>
+          <option value="EXCUSED_ABSENCE">غائب بعذر</option>
+          <option value="UNEXCUSED_ABSENCE">غائب بلا عذر</option>
+        </select>
+      </label>
+      {absent && (
+        <label>
+          سبب الغياب
+          <input
+            name={`reason-${row.id}`}
+            defaultValue={row.reason ?? ""}
+            minLength={3}
+            required
+          />
+        </label>
+      )}
+      {row.metrics
+        .filter((metric) => metric.applies_to.includes(attendance))
+        .map((metric) => (
+          <label key={metric.definition_id}>
+            {metric.name}
+            {metric.required && " *"}
+            {metric.value_type === "ENUM" ? (
+              <select
+                name={`m-${row.id}-${metric.definition_id}`}
+                defaultValue={
+                  typeof metric.value === "string" ? metric.value : ""
+                }
+                required={metric.required}
+              >
+                <option value="">اختر التقييم</option>
+                {(metric.constraints.options ?? []).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            ) : metric.value_type === "BOOLEAN" ? (
+              <select
+                name={`m-${row.id}-${metric.definition_id}`}
+                defaultValue={
+                  typeof metric.value === "boolean" ? String(metric.value) : ""
+                }
+                required={metric.required}
+              >
+                <option value="">اختر</option>
+                <option value="true">نعم</option>
+                <option value="false">لا</option>
+              </select>
+            ) : (
+              <input
+                name={`m-${row.id}-${metric.definition_id}`}
+                type={
+                  ["COUNT", "PERCENT", "SCORE", "DURATION", "NUMBER"].includes(
+                    metric.value_type,
+                  )
+                    ? "number"
+                    : "text"
+                }
+                min={metric.constraints.min}
+                max={metric.constraints.max}
+                required={metric.required}
+                defaultValue={
+                  typeof metric.value === "string" ||
+                  typeof metric.value === "number"
+                    ? metric.value
+                    : ""
+                }
+              />
+            )}
+          </label>
+        ))}
+    </article>
   );
 }
