@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import "@fontsource-variable/cairo";
 import "./globals.css";
+
 export const metadata: Metadata = { title: "نظام التشغيل التربوي" };
 export default function Layout({
   children,
