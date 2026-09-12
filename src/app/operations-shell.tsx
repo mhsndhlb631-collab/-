@@ -381,7 +381,7 @@ export function OperationsShell() {
     return (
       <main className="login-page">
         <section className="brand-panel">
-          <span className="eyebrow">منصة قِوام</span>
+          <span className="eyebrow">منصة مِنهاج</span>
           <h1>نظام التشغيل التربوي</h1>
           <p>
             كل ما تحتاجه لإدارة الرحلة التربوية، في مساحة واحدة واضحة وذكية.
@@ -395,7 +395,7 @@ export function OperationsShell() {
             </div>
             <div className="preview-body">
               <aside>
-                <b>ق</b>
+                <b>م</b>
                 <i />
                 <i />
                 <i />
@@ -428,7 +428,7 @@ export function OperationsShell() {
             </div>
           </div>
           <div className="brand-mark" aria-hidden="true">
-            ق
+            م
           </div>
         </section>
         <section className="login-card">
@@ -573,10 +573,10 @@ export function OperationsShell() {
       <aside className={`saas-sidebar${mobileNavOpen ? " is-open" : ""}`}>
         <div className="sidebar-brand">
           <span className="qiwam-logo" aria-hidden="true">
-            ق
+            م
           </span>
           <div className="sidebar-label">
-            <strong>قِوام</strong>
+            <strong>مِنهاج</strong>
             <small>نظام التشغيل التربوي</small>
           </div>
           <button
@@ -724,7 +724,7 @@ export function OperationsShell() {
               onClick={() => setPaletteOpen(true)}
             >
               <QiwamIcon name="search" size={18} weight="light" />
-              <span>ابحث في قِوام…</span>
+              <span>ابحث في مِنهاج…</span>
               <kbd>Ctrl K</kbd>
             </button>
             <button
@@ -779,7 +779,7 @@ export function OperationsShell() {
               onClick={() => setProfileOpen((value) => !value)}
               aria-label="قائمة الحساب"
             >
-              {me?.display_name?.slice(0, 1) ?? "ق"}
+              {me?.display_name?.slice(0, 1) ?? "م"}
             </button>
           </div>
         </header>
@@ -806,7 +806,7 @@ export function OperationsShell() {
             <PremiumToday
               data={data}
               role={data.actor_role}
-              displayName={me?.display_name ?? "مستخدم قِوام"}
+              displayName={me?.display_name ?? "مستخدم مِنهاج"}
               open={setActiveView}
             />
           )}
