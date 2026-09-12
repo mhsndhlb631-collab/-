@@ -433,12 +433,16 @@ label {
   bottom: 8%;
   display: grid;
   place-items: center;
-  width: 76px;
-  height: 76px;
-  border: 1px solid #ffffff4d;
-  border-radius: 50%;
-  font-size: 2rem;
-  color: #f4d59e;
+  width: 92px;
+  height: 92px;
+  border: 0;
+  border-radius: 24px;
+  filter: drop-shadow(0 16px 30px rgb(0 0 0 / 24%));
+}
+.brand-mark img {
+  width: 92px;
+  height: 92px;
+  object-fit: contain;
 }
 .eyebrow,
 .section-kicker {
@@ -512,13 +516,17 @@ label {
 .brand-mark-static {
   display: grid;
   place-items: center;
-  width: 70px;
-  aspect-ratio: 1;
+  width: 112px;
+  height: 112px;
   margin-inline: auto;
-  border-radius: 50%;
-  color: #f3d49b;
-  background: var(--green);
-  font-size: 2rem;
+  border-radius: 28px;
+  filter: drop-shadow(0 18px 32px rgb(15 23 42 / 16%));
+  animation: brand-arrive 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.brand-mark-static img {
+  width: 112px;
+  height: 112px;
+  object-fit: contain;
 }
 .account-actions,
 .role-nav {
@@ -2472,9 +2480,13 @@ kbd {
   place-items: center;
   width: 22px;
   height: 22px;
-  color: white;
-  background: linear-gradient(135deg, #0d9488, #6366f1);
+  background: transparent;
   border-radius: 7px;
+}
+.preview-body aside b img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 .preview-body aside i {
   display: block;
@@ -3405,5 +3417,28 @@ textarea {
   .center-hero {
     align-items: start;
     flex-direction: column;
+  }
+}
+
+/* Minhaj supplied brand artwork */
+.qiwam-logo {
+  background: transparent;
+  box-shadow: none;
+}
+
+.qiwam-logo img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+@keyframes brand-arrive {
+  from {
+    opacity: 0;
+    transform: scale(0.88) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
   }
 }

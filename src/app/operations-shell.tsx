@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent, useEffect, useState } from "react";
+import Image from "next/image";
 import { TrackingWorkspace } from "./tracking-workspace";
 import { LearningWorkspace } from "./learning-workspace";
 import { FollowupWorkspace } from "./followup-workspace";
@@ -310,7 +311,13 @@ export function OperationsShell() {
     return (
       <main className="app-loading" aria-busy="true">
         <div className="brand-mark-static" aria-hidden="true">
-          ق
+          <Image
+            src="/brand/minhaj-logo.png"
+            alt=""
+            width={112}
+            height={112}
+            priority
+          />
         </div>
         <p role="status">جارٍ تجهيز مساحتك…</p>
       </main>
@@ -395,7 +402,14 @@ export function OperationsShell() {
             </div>
             <div className="preview-body">
               <aside>
-                <b>م</b>
+                <b>
+                  <Image
+                    src="/brand/minhaj-logo.png"
+                    alt=""
+                    width={18}
+                    height={18}
+                  />
+                </b>
                 <i />
                 <i />
                 <i />
@@ -428,7 +442,13 @@ export function OperationsShell() {
             </div>
           </div>
           <div className="brand-mark" aria-hidden="true">
-            م
+            <Image
+              src="/brand/minhaj-logo.png"
+              alt=""
+              width={92}
+              height={92}
+              priority
+            />
           </div>
         </section>
         <section className="login-card">
@@ -573,7 +593,13 @@ export function OperationsShell() {
       <aside className={`saas-sidebar${mobileNavOpen ? " is-open" : ""}`}>
         <div className="sidebar-brand">
           <span className="qiwam-logo" aria-hidden="true">
-            م
+            <Image
+              src="/brand/minhaj-logo.png"
+              alt=""
+              width={32}
+              height={32}
+              priority
+            />
           </span>
           <div className="sidebar-label">
             <strong>مِنهاج</strong>
