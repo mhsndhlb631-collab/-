@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   activeScopeId,
   connectivity,
@@ -30,6 +31,8 @@ function timeCopy(value: string | null) {
 }
 
 export function SyncStatus() {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [kind, setKind] = useState<ConnectivityKind>(
@@ -77,6 +80,24 @@ export function SyncStatus() {
     };
   }, [refresh]);
 
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    const trigger = triggerRef.current;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    const focusTimer = window.setTimeout(() => closeRef.current?.focus(), 0);
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+      trigger?.focus();
+    };
+  }, [open]);
+
   const copy = syncStatusCopy(kind, counts);
   const tone =
     kind === "offline" || kind === "degraded" || kind === "server_error"
@@ -115,102 +136,126 @@ export function SyncStatus() {
   return (
     <div className="sync-status-wrap">
       <button
+        ref={triggerRef}
         type="button"
         className={`sync-status-pill is-${tone}`}
         aria-expanded={open}
+        aria-controls="sync-center-dialog"
         onClick={() => setOpen((value) => !value)}
       >
         <span className="sync-status-mark" aria-hidden="true" />
         <span>{copy.label}</span>
       </button>
-      {open && (
-        <section className="sync-center" aria-label="مركز المزامنة">
-          <header>
-            <div>
-              <strong>الحفظ والمزامنة</strong>
-              <small>{timeCopy(lastSync)}</small>
-            </div>
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="إغلاق مركز المزامنة"
-              onClick={() => setOpen(false)}
+      {open &&
+        createPortal(
+          <div
+            className="sync-center-backdrop"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.currentTarget === event.target) setOpen(false);
+            }}
+          >
+            <section
+              id="sync-center-dialog"
+              className="sync-center"
+              role="dialog"
+              aria-modal="true"
+              aria-label="مركز المزامنة"
             >
-              <QiwamIcon name="close" size={17} />
-            </button>
-          </header>
-          <div className={`sync-center-state is-${tone}`}>
-            <QiwamIcon
-              name={tone === "ready" ? "check" : "sync"}
-              size={22}
-              weight="duotone"
-            />
-            <div>
-              <strong>{copy.label}</strong>
-              <small>{copy.detail}</small>
-            </div>
-          </div>
-          <div className="sync-counts" aria-label="ملخص المزامنة">
-            <span>
-              <b>{counts.pending}</b> محفوظة
-            </span>
-            <span>
-              <b>{counts.failed}</b> تحتاج إجراء
-            </span>
-            <span>
-              <b>{counts.conflicts}</b> مراجعة
-            </span>
-          </div>
-          {conflicts.map((conflict) => (
-            <article className="sync-issue" key={conflict.id}>
-              <div>
-                <strong>يوجد تعديل أحدث على الخادم</strong>
-                <small>راجع السجل ثم اختر النسخة التي تريد الاحتفاظ بها.</small>
+              <header>
+                <div>
+                  <strong>الحفظ والمزامنة</strong>
+                  <small>{timeCopy(lastSync)}</small>
+                </div>
+                <button
+                  ref={closeRef}
+                  type="button"
+                  className="icon-button"
+                  aria-label="إغلاق مركز المزامنة"
+                  onClick={() => setOpen(false)}
+                >
+                  <QiwamIcon name="close" size={17} />
+                </button>
+              </header>
+              <div className={`sync-center-state is-${tone}`}>
+                <QiwamIcon
+                  name={tone === "ready" ? "check" : "sync"}
+                  size={22}
+                  weight="duotone"
+                />
+                <div>
+                  <strong>{copy.label}</strong>
+                  <small>{copy.detail}</small>
+                </div>
               </div>
-              <button
-                type="button"
-                disabled={kind !== "online"}
-                onClick={() => void acceptServerVersion(conflict)}
-              >
-                استخدام نسخة الخادم
-              </button>
-            </article>
-          ))}
-          {failures.map((failure) => (
-            <article className="sync-issue" key={failure.id}>
-              <div>
-                <strong>{failureCopy(failure.status)}</strong>
-                <small>افتح الشاشة المرتبطة وراجع التغيير.</small>
+              <div className="sync-counts" aria-label="ملخص المزامنة">
+                <span>
+                  <b>{counts.pending}</b> محفوظة
+                </span>
+                <span>
+                  <b>{counts.failed}</b> تحتاج إجراء
+                </span>
+                <span>
+                  <b>{counts.conflicts}</b> مراجعة
+                </span>
               </div>
-              <button
-                type="button"
-                disabled={busy || kind === "offline"}
-                onClick={() => void retryFailure(failure)}
-              >
-                {failure.status === "blocked_auth"
-                  ? "تسجيل الدخول"
-                  : "إعادة المحاولة"}
-              </button>
-            </article>
-          ))}
-          <footer>
-            {updateReady && (
-              <button type="button" onClick={() => window.location.reload()}>
-                تحديث التطبيق
-              </button>
-            )}
-            <button
-              type="button"
-              className="primary"
-              disabled={busy || kind === "offline"}
-              onClick={() => void sync()}
-            >
-              <QiwamIcon name="sync" size={17} />
-              {busy ? "جارٍ المزامنة…" : "مزامنة الآن"}
-            </button>
-          </footer>
-        </section>
-      )}
+              {conflicts.map((conflict) => (
+                <article className="sync-issue" key={conflict.id}>
+                  <div>
+                    <strong>يوجد تعديل أحدث على الخادم</strong>
+                    <small>
+                      راجع السجل ثم اختر النسخة التي تريد الاحتفاظ بها.
+                    </small>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={kind !== "online"}
+                    onClick={() => void acceptServerVersion(conflict)}
+                  >
+                    استخدام نسخة الخادم
+                  </button>
+                </article>
+              ))}
+              {failures.map((failure) => (
+                <article className="sync-issue" key={failure.id}>
+                  <div>
+                    <strong>{failureCopy(failure.status)}</strong>
+                    <small>افتح الشاشة المرتبطة وراجع التغيير.</small>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy || kind === "offline"}
+                    onClick={() => void retryFailure(failure)}
+                  >
+                    {failure.status === "blocked_auth"
+                      ? "تسجيل الدخول"
+                      : "إعادة المحاولة"}
+                  </button>
+                </article>
+              ))}
+              <footer>
+                {updateReady && (
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                  >
+                    تحديث التطبيق
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={busy || kind === "offline"}
+                  onClick={() => void sync()}
+                >
+                  <QiwamIcon name="sync" size={17} />
+                  {busy ? "جارٍ المزامنة…" : "مزامنة الآن"}
+                </button>
+              </footer>
+            </section>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

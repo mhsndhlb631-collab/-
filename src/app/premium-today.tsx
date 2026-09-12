@@ -291,6 +291,127 @@ export function PremiumToday({
         </button>
       </header>
 
+      <div className="today-priority-grid">
+        <section
+          className="today-summary"
+          aria-labelledby="today-summary-title"
+        >
+          <header>
+            <div>
+              <span className="section-kicker">خلاصة عملية</span>
+              <h3 id="today-summary-title">ملخص اليوم</h3>
+            </div>
+          </header>
+          <div>
+            <article>
+              <span>
+                <QiwamIcon name="warning" weight="duotone" />
+                يحتاج إجراء
+                <b>
+                  {(
+                    (counts.attentions ?? 0) + (counts.actions ?? 0)
+                  ).toLocaleString("ar-EG")}
+                </b>
+              </span>
+              <p>
+                {(counts.attentions ?? 0) + (counts.actions ?? 0)
+                  ? "راجع التنبيهات والإجراءات المفتوحة."
+                  : "لا توجد بنود عاجلة الآن."}
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  open(
+                    role === "RESPONSIBLE"
+                      ? "reports"
+                      : role === "MENTOR"
+                        ? "followup"
+                        : "tracking",
+                  )
+                }
+              >
+                فتح المتابعة
+              </button>
+            </article>
+            <article>
+              <span>
+                <QiwamIcon name="calendar" weight="duotone" />
+                جلسات مفتوحة
+                <b>
+                  {data.sessions
+                    .filter((session) => session.status === "OPEN")
+                    .length.toLocaleString("ar-EG")}
+                </b>
+              </span>
+              <p>الجلسات المفتوحة تحتاج تسجيلًا أو إغلاقًا.</p>
+              <button
+                type="button"
+                onClick={() =>
+                  open(role === "STUDENT" ? "program" : "sessions")
+                }
+              >
+                {role === "STUDENT" ? "عرض البرنامج" : "عرض الجلسات"}
+              </button>
+            </article>
+            <article>
+              <span>
+                <QiwamIcon name="check" weight="duotone" />
+                اكتمال التجهيز
+                <b>
+                  {role === "RESPONSIBLE"
+                    ? `${Math.round((completedSteps / setupSteps.length) * 100)}٪`
+                    : "جاهز"}
+                </b>
+              </span>
+              <p>
+                {role === "RESPONSIBLE"
+                  ? `${setupSteps.length - completedSteps} خطوات متبقية للإعداد الكامل.`
+                  : "كل الأدوات المتاحة لدورك جاهزة."}
+              </p>
+              <button type="button" onClick={() => open("program")}>
+                فتح البرنامج
+              </button>
+            </article>
+          </div>
+        </section>
+
+        <section className="premium-card quick-card">
+          <header className="section-heading">
+            <div>
+              <span className="section-icon">
+                <QiwamIcon name="plus" weight="duotone" />
+              </span>
+              <div>
+                <h3>إجراءات سريعة</h3>
+                <p>ابدأ المهمة مباشرة</p>
+              </div>
+            </div>
+          </header>
+          <div className="quick-action-grid">
+            {role === "RESPONSIBLE" && (
+              <button type="button" onClick={() => open("people")}>
+                <QiwamIcon name="student" weight="fill" />
+                <span>إضافة طالب</span>
+              </button>
+            )}{" "}
+            {role !== "STUDENT" && (
+              <button type="button" onClick={() => open("sessions")}>
+                <QiwamIcon name="calendar-check" weight="fill" />
+                <span>فتح جلسة</span>
+              </button>
+            )}
+            <button type="button" onClick={() => open("learning")}>
+              <QiwamIcon name="notebook" weight="fill" />
+              <span>{role === "STUDENT" ? "عرض التكاليف" : "إضافة تكليف"}</span>
+            </button>
+            <button type="button" onClick={() => open("tracking")}>
+              <QiwamIcon name="target" weight="fill" />
+              <span>{role === "STUDENT" ? "تسجيل إنجاز" : "تسجيل متابعة"}</span>
+            </button>
+          </div>
+        </section>
+      </div>
+
       <section className={`today-focus-card is-${focus.tone}`}>
         <span className="today-focus-icon" aria-hidden="true">
           <QiwamIcon name={focus.icon} size={24} weight="duotone" />
@@ -529,46 +650,6 @@ export function PremiumToday({
         </div>
 
         <aside className="today-side-column">
-          <section className="premium-card quick-card">
-            <header className="section-heading">
-              <div>
-                <span className="section-icon">
-                  <QiwamIcon name="plus" weight="duotone" />
-                </span>
-                <div>
-                  <h3>إجراءات سريعة</h3>
-                  <p>ابدأ المهمة مباشرة</p>
-                </div>
-              </div>
-            </header>
-            <div className="quick-action-grid">
-              {role === "RESPONSIBLE" && (
-                <button type="button" onClick={() => open("people")}>
-                  <QiwamIcon name="student" weight="fill" />
-                  <span>إضافة طالب</span>
-                </button>
-              )}{" "}
-              {role !== "STUDENT" && (
-                <button type="button" onClick={() => open("sessions")}>
-                  <QiwamIcon name="calendar-check" weight="fill" />
-                  <span>فتح جلسة</span>
-                </button>
-              )}
-              <button type="button" onClick={() => open("learning")}>
-                <QiwamIcon name="notebook" weight="fill" />
-                <span>
-                  {role === "STUDENT" ? "عرض التكاليف" : "إضافة تكليف"}
-                </span>
-              </button>
-              <button type="button" onClick={() => open("tracking")}>
-                <QiwamIcon name="target" weight="fill" />
-                <span>
-                  {role === "STUDENT" ? "تسجيل إنجاز" : "تسجيل متابعة"}
-                </span>
-              </button>
-            </div>
-          </section>
-
           {role === "RESPONSIBLE" && (
             <section className="premium-card onboarding-card">
               <header>
@@ -626,83 +707,6 @@ export function PremiumToday({
           </section>
         </aside>
       </div>
-      <section className="today-summary" aria-labelledby="today-summary-title">
-        <header>
-          <div>
-            <span className="section-kicker">خلاصة عملية</span>
-            <h3 id="today-summary-title">ملخص اليوم</h3>
-          </div>
-        </header>
-        <div>
-          <article>
-            <span>
-              <QiwamIcon name="warning" weight="duotone" />
-              يحتاج إجراء
-              <b>
-                {(
-                  (counts.attentions ?? 0) + (counts.actions ?? 0)
-                ).toLocaleString("ar-EG")}
-              </b>
-            </span>
-            <p>
-              {(counts.attentions ?? 0) + (counts.actions ?? 0)
-                ? "راجع التنبيهات والإجراءات المفتوحة."
-                : "لا توجد بنود عاجلة الآن."}
-            </p>
-            <button
-              type="button"
-              onClick={() =>
-                open(
-                  role === "RESPONSIBLE"
-                    ? "reports"
-                    : role === "MENTOR"
-                      ? "followup"
-                      : "tracking",
-                )
-              }
-            >
-              فتح المتابعة
-            </button>
-          </article>
-          <article>
-            <span>
-              <QiwamIcon name="calendar" weight="duotone" />
-              جلسات مفتوحة
-              <b>
-                {data.sessions
-                  .filter((session) => session.status === "OPEN")
-                  .length.toLocaleString("ar-EG")}
-              </b>
-            </span>
-            <p>الجلسات المفتوحة تحتاج تسجيلًا أو إغلاقًا.</p>
-            <button
-              type="button"
-              onClick={() => open(role === "STUDENT" ? "program" : "sessions")}
-            >
-              {role === "STUDENT" ? "عرض البرنامج" : "عرض الجلسات"}
-            </button>
-          </article>
-          <article>
-            <span>
-              <QiwamIcon name="check" weight="duotone" />
-              اكتمال التجهيز
-              <b>
-                {role === "RESPONSIBLE"
-                  ? `${Math.round((completedSteps / setupSteps.length) * 100)}٪`
-                  : "جاهز"}
-              </b>
-            </span>
-            <p>
-              {role === "RESPONSIBLE"
-                ? `${setupSteps.length - completedSteps} خطوات متبقية للإعداد الكامل.`
-                : "كل الأدوات المتاحة لدورك جاهزة."}
-            </p>
-            <button type="button" onClick={() => open("program")}>
-              فتح البرنامج
-            </button>
-          </article>
-        </div>
-      </section>
     </div>
   );
 }

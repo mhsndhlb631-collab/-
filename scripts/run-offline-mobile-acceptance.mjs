@@ -4,16 +4,27 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const read = (path) => readFile(join(root, path), "utf8");
-const [serviceWorker, manifest, layout, shell, commands, repository, preload] =
-  await Promise.all([
-    read("public/sw.js"),
-    read("src/app/manifest.ts"),
-    read("src/app/globals.css"),
-    read("src/app/operations-shell.tsx"),
-    read("src/offline/commands.ts"),
-    read("src/offline/repository.ts"),
-    read("src/offline/preload.ts"),
-  ]);
+const [
+  serviceWorker,
+  manifest,
+  layout,
+  shell,
+  commands,
+  repository,
+  preload,
+  syncStatus,
+  today,
+] = await Promise.all([
+  read("public/sw.js"),
+  read("src/app/manifest.ts"),
+  read("src/app/globals.css"),
+  read("src/app/operations-shell.tsx"),
+  read("src/offline/commands.ts"),
+  read("src/offline/repository.ts"),
+  read("src/offline/preload.ts"),
+  read("src/app/sync-status.tsx"),
+  read("src/app/premium-today.tsx"),
+]);
 
 const checks = [];
 function check(name, condition) {
@@ -54,6 +65,40 @@ check("password_manager_username", shell.includes('autoComplete="username"'));
 check(
   "password_manager_password",
   shell.includes('autoComplete="current-password"'),
+);
+check(
+  "single_row_mobile_header",
+  /\.topbar\s*\{[^}]*flex-direction:\s*row;/s.test(layout),
+);
+check(
+  "ios_text_scale_control",
+  layout.includes("-webkit-text-size-adjust: 100%"),
+);
+check(
+  "sync_dialog_portal",
+  syncStatus.includes("createPortal(") &&
+    syncStatus.includes('aria-modal="true"'),
+);
+check(
+  "sync_dialog_close_paths",
+  syncStatus.includes('event.key === "Escape"') &&
+    syncStatus.includes("event.currentTarget === event.target") &&
+    syncStatus.includes('aria-label="إغلاق مركز المزامنة"'),
+);
+const summaryIndex = today.indexOf('className="today-summary"');
+const quickActionsIndex = today.indexOf('className="premium-card quick-card"');
+const focusIndex = today.indexOf("today-focus-card");
+check(
+  "today_priority_order",
+  summaryIndex > 0 &&
+    quickActionsIndex > summaryIndex &&
+    focusIndex > quickActionsIndex,
+);
+check(
+  "mobile_workspace_type_scale",
+  layout.includes(".dashboard .workspace-hero h2") &&
+    layout.includes(".dashboard .panel h3") &&
+    layout.includes(".section-icon svg"),
 );
 
 const output = {

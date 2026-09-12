@@ -787,7 +787,7 @@ export function OperationsShell() {
               <kbd>Ctrl K</kbd>
             </button>
             <button
-              className="icon-button"
+              className="icon-button theme-toggle"
               type="button"
               onClick={toggleTheme}
               aria-label={
