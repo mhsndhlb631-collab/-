@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { QiwamIcon, type QiwamIconName } from "./qiwam-icon";
 import { readJson } from "../offline/client";
+import { selectTodayFocus } from "./today-focus";
 
 type Role = "RESPONSIBLE" | "MENTOR" | "STUDENT";
 type View =
@@ -266,6 +267,7 @@ export function PremiumToday({
         month: "long",
       }).format(new Date(measuredAt))
     : "اليوم";
+  const focus = selectTodayFocus(role, counts, todaySessions);
 
   return (
     <div className="premium-today">
@@ -288,6 +290,21 @@ export function PremiumToday({
           {role === "RESPONSIBLE" ? "عرض التقارير" : "عرض التقدم"}
         </button>
       </header>
+
+      <section className={`today-focus-card is-${focus.tone}`}>
+        <span className="today-focus-icon" aria-hidden="true">
+          <QiwamIcon name={focus.icon} size={24} weight="duotone" />
+        </span>
+        <div>
+          <span>{focus.kicker}</span>
+          <strong>{focus.title}</strong>
+          <p>{focus.detail}</p>
+        </div>
+        <button type="button" onClick={() => open(focus.view)}>
+          {focus.action}
+          <QiwamIcon name="caret-left" size={15} />
+        </button>
+      </section>
 
       <section
         className={`premium-stats${loading ? " is-loading" : ""}`}
@@ -445,68 +462,70 @@ export function PremiumToday({
             </div>
           </section>
 
-          <section className="premium-card activity-card">
-            <header className="section-heading">
-              <div>
-                <span className="section-icon">
-                  <QiwamIcon name="sparkle" weight="duotone" />
-                </span>
+          {role === "RESPONSIBLE" && (
+            <section className="premium-card activity-card">
+              <header className="section-heading">
                 <div>
-                  <h3>آخر النشاطات</h3>
-                  <p>سجل حديث لما تغيّر في المنصة</p>
+                  <span className="section-icon">
+                    <QiwamIcon name="sparkle" weight="duotone" />
+                  </span>
+                  <div>
+                    <h3>آخر النشاطات</h3>
+                    <p>سجل حديث لما تغيّر في المنصة</p>
+                  </div>
                 </div>
-              </div>
-            </header>
-            {events.length ? (
-              <div className="activity-feed">
-                {events.map((event) => (
-                  <article key={event.id}>
-                    <span className="activity-icon">
-                      <QiwamIcon
-                        name={
-                          event.action.includes("SESSION")
-                            ? "calendar"
-                            : event.action.includes("REPORT")
-                              ? "reports"
-                              : event.action.includes("PERSON") ||
-                                  event.action.includes("ACCOUNT")
-                                ? "people"
-                                : "check"
-                        }
-                        size={17}
-                        weight="duotone"
-                      />
-                    </span>
-                    <div>
-                      <strong>
-                        {auditLabels[event.action] ??
-                          `تم تنفيذ ${event.action.replaceAll("_", " ")}`}
-                      </strong>
-                      <small>
-                        {new Intl.RelativeTimeFormat("ar-EG", {
-                          numeric: "auto",
-                        }).format(
-                          Math.max(
-                            -30,
-                            Math.round(
-                              (Date.parse(event.occurred_at) - measuredAt) /
-                                3600000,
+              </header>
+              {events.length ? (
+                <div className="activity-feed">
+                  {events.map((event) => (
+                    <article key={event.id}>
+                      <span className="activity-icon">
+                        <QiwamIcon
+                          name={
+                            event.action.includes("SESSION")
+                              ? "calendar"
+                              : event.action.includes("REPORT")
+                                ? "reports"
+                                : event.action.includes("PERSON") ||
+                                    event.action.includes("ACCOUNT")
+                                  ? "people"
+                                  : "check"
+                          }
+                          size={17}
+                          weight="duotone"
+                        />
+                      </span>
+                      <div>
+                        <strong>
+                          {auditLabels[event.action] ??
+                            `تم تنفيذ ${event.action.replaceAll("_", " ")}`}
+                        </strong>
+                        <small>
+                          {new Intl.RelativeTimeFormat("ar-EG", {
+                            numeric: "auto",
+                          }).format(
+                            Math.max(
+                              -30,
+                              Math.round(
+                                (Date.parse(event.occurred_at) - measuredAt) /
+                                  3600000,
+                              ),
                             ),
-                          ),
-                          "hour",
-                        )}
-                      </small>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="compact-empty">
-                <QiwamIcon name="sparkle" size={34} weight="duotone" />
-                <span>سيظهر النشاط هنا بعد بدء تشغيل البرنامج.</span>
-              </div>
-            )}
-          </section>
+                            "hour",
+                          )}
+                        </small>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="compact-empty">
+                  <QiwamIcon name="sparkle" size={34} weight="duotone" />
+                  <span>سيظهر النشاط هنا بعد بدء تشغيل البرنامج.</span>
+                </div>
+              )}
+            </section>
+          )}
         </div>
 
         <aside className="today-side-column">
@@ -537,11 +556,15 @@ export function PremiumToday({
               )}
               <button type="button" onClick={() => open("learning")}>
                 <QiwamIcon name="notebook" weight="fill" />
-                <span>إضافة تكليف</span>
+                <span>
+                  {role === "STUDENT" ? "عرض التكاليف" : "إضافة تكليف"}
+                </span>
               </button>
               <button type="button" onClick={() => open("tracking")}>
                 <QiwamIcon name="target" weight="fill" />
-                <span>تسجيل متابعة</span>
+                <span>
+                  {role === "STUDENT" ? "تسجيل إنجاز" : "تسجيل متابعة"}
+                </span>
               </button>
             </div>
           </section>
