@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { readJson } from "../offline/client";
 
 export type PersonRow = {
   person_id: string;
@@ -35,15 +36,13 @@ export function PeopleWorkspace({
   } | null>(null);
 
   async function load() {
-    const response = await fetch("/api/v1/people", { cache: "no-store" });
-    if (response.ok) setData(await response.json());
+    const result = await readJson<PeopleData>("/api/v1/people");
+    setData(result.data);
   }
   useEffect(() => {
-    void fetch("/api/v1/people", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((result) => {
-        if (result) setData(result);
-      });
+    void readJson<PeopleData>("/api/v1/people")
+      .then((result) => setData(result.data))
+      .catch(() => undefined);
   }, []);
 
   async function create(

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { readJson } from "../offline/client";
 
 type Journey = {
   role: string;
@@ -44,22 +45,18 @@ export function JourneyPanel({
     [error, setError] = useState("");
   async function load() {
     setError("");
-    const response = await fetch(`/api/v1/me/${kind}`, { cache: "no-store" });
-    if (!response.ok) {
+    try {
+      const result = await readJson<Journey>(`/api/v1/me/${kind}`);
+      setData(result.data);
+    } catch {
       setError("تعذر تحميل البيانات. حاول مرة أخرى.");
-      return;
     }
-    setData(await response.json());
   }
   useEffect(() => {
     let cancelled = false;
-    void fetch(`/api/v1/me/${kind}`, { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("request failed");
-        return (await response.json()) as Journey;
-      })
+    void readJson<Journey>(`/api/v1/me/${kind}`)
       .then((result) => {
-        if (!cancelled) setData(result);
+        if (!cancelled) setData(result.data);
       })
       .catch(() => {
         if (!cancelled) setError("تعذر تحميل البيانات. حاول مرة أخرى.");

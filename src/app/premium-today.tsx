@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { QiwamIcon, type QiwamIconName } from "./qiwam-icon";
+import { readJson } from "../offline/client";
 
 type Role = "RESPONSIBLE" | "MENTOR" | "STUDENT";
 type View =
@@ -159,29 +160,31 @@ export function PremiumToday({
 
   useEffect(() => {
     let cancelled = false;
-    const requests: Promise<Response>[] = [
-      fetch("/api/v1/me/today", { cache: "no-store" }),
+    const requests: Promise<{ data: unknown }>[] = [
+      readJson<{ counts: TodayCounts }>("/api/v1/me/today"),
     ];
     if (role === "RESPONSIBLE") {
       requests.push(
-        fetch("/api/v1/audit-events?limit=6", { cache: "no-store" }),
-        fetch("/api/v1/people", { cache: "no-store" }),
+        readJson<{ events: AuditEvent[] }>("/api/v1/audit-events?limit=6"),
+        readJson<{ students?: unknown[]; mentors?: unknown[] }>(
+          "/api/v1/people",
+        ),
       );
     }
     void Promise.all(requests)
       .then(async ([todayResponse, auditResponse, peopleResponse]) => {
-        if (!cancelled && todayResponse?.ok) {
-          const today = (await todayResponse.json()) as { counts: TodayCounts };
+        if (!cancelled && todayResponse) {
+          const today = todayResponse.data as { counts: TodayCounts };
           setCounts(today.counts ?? {});
         }
-        if (!cancelled && auditResponse?.ok) {
-          const audit = (await auditResponse.json()) as {
+        if (!cancelled && auditResponse) {
+          const audit = auditResponse.data as {
             events: AuditEvent[];
           };
           setEvents(audit.events ?? []);
         }
-        if (!cancelled && peopleResponse?.ok) {
-          const people = (await peopleResponse.json()) as {
+        if (!cancelled && peopleResponse) {
+          const people = peopleResponse.data as {
             students?: unknown[];
             mentors?: unknown[];
           };
@@ -190,6 +193,7 @@ export function PremiumToday({
           );
         }
       })
+      .catch(() => undefined)
       .finally(() => {
         if (!cancelled) {
           setMeasuredAt(Date.now());

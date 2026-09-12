@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import type { PeopleData } from "./people-workspace";
+import { readJson } from "../offline/client";
 
 type Cohort = {
   id: string;
@@ -20,15 +21,13 @@ export function DistributionWorkspace({
 }) {
   const [people, setPeople] = useState<PeopleData | null>(null);
   async function load() {
-    const response = await fetch("/api/v1/people", { cache: "no-store" });
-    if (response.ok) setPeople(await response.json());
+    const result = await readJson<PeopleData>("/api/v1/people");
+    setPeople(result.data);
   }
   useEffect(() => {
-    void fetch("/api/v1/people", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((result) => {
-        if (result) setPeople(result);
-      });
+    void readJson<PeopleData>("/api/v1/people")
+      .then((result) => setPeople(result.data))
+      .catch(() => undefined);
   }, []);
   const groups = cohorts.flatMap((cohort) =>
     cohort.groups.map((group) => ({

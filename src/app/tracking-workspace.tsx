@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { readJson } from "../offline/client";
 
 type TrackingItem = {
   enrollment_id: string;
@@ -67,26 +68,23 @@ export function TrackingWorkspace({
   async function load() {
     setLoading(true);
     try {
-      const response = await fetch(
+      const result = await readJson<{ expected: TrackingItem[] }>(
         `/api/v1/tracking/expected?from=${cairoDate()}&to=${cairoDate(7)}`,
-        { cache: "no-store" },
       );
-      if (response.ok) setItems((await response.json()).expected);
+      setItems(result.data.expected);
     } finally {
       setLoading(false);
     }
   }
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/v1/tracking/expected?from=${cairoDate()}&to=${cairoDate(7)}`, {
-      cache: "no-store",
-    })
-      .then(async (response) =>
-        response.ok ? ((await response.json()).expected as TrackingItem[]) : [],
-      )
-      .then((expected) => {
-        if (!cancelled) setItems(expected);
+    readJson<{ expected: TrackingItem[] }>(
+      `/api/v1/tracking/expected?from=${cairoDate()}&to=${cairoDate(7)}`,
+    )
+      .then((result) => {
+        if (!cancelled) setItems(result.data.expected);
       })
+      .catch(() => undefined)
       .finally(() => {
         if (!cancelled) setLoading(false);
       });

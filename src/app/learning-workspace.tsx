@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent, useEffect, useState } from "react";
+import { readJson } from "../offline/client";
 
 type Item = { id: string; title: string; week_id: string; week_number: number };
 type Data = {
@@ -58,15 +59,13 @@ export function LearningWorkspace({
     } | null>(null),
     [selectedEnrollmentId, setSelectedEnrollmentId] = useState("");
   async function load() {
-    const response = await fetch("/api/v1/learning", { cache: "no-store" });
-    if (response.ok) setData(await response.json());
+    const result = await readJson<Data>("/api/v1/learning");
+    setData(result.data);
   }
   useEffect(() => {
-    void fetch("/api/v1/learning", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((result) => {
-        if (result) setData(result);
-      });
+    void readJson<Data>("/api/v1/learning")
+      .then((result) => setData(result.data))
+      .catch(() => undefined);
   }, []);
   async function run(path: string, body: unknown, method = "POST") {
     const result = await command(path, body, method);
@@ -81,15 +80,14 @@ export function LearningWorkspace({
   const weekId = data?.assignments[0]?.week_id ?? data?.exams[0]?.week_id;
   async function loadWeek() {
     if (!enrollment || !weekId) return;
-    const response = await fetch(
-      `/api/v1/students/${enrollment.student_id}/weeks/${weekId}`,
-      { cache: "no-store" },
-    );
-    if (!response.ok) return;
-    const result = await response.json();
-    setWeekSummary(result.summary);
+    const result = await readJson<{
+      summary: NonNullable<typeof weekSummary>;
+      coverage: number;
+      score: number | null;
+    }>(`/api/v1/students/${enrollment.student_id}/weeks/${weekId}`);
+    setWeekSummary(result.data.summary);
     setMessage(
-      `تغطية الأسبوع ${Math.round(result.coverage * 100)}%${result.score === null ? "" : ` · الدرجة ${Math.round(result.score)}%`}`,
+      `تغطية الأسبوع ${Math.round(result.data.coverage * 100)}%${result.data.score === null ? "" : ` · الدرجة ${Math.round(result.data.score)}%`}`,
     );
   }
   return (

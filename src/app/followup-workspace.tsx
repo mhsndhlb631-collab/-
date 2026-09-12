@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { readJson } from "../offline/client";
 
 type Attention = {
   id: string;
@@ -35,28 +36,26 @@ export function FollowupWorkspace({
     [cases, setCases] = useState<CaseItem[]>([]);
   async function load() {
     const responses = await Promise.all([
-      fetch("/api/v1/attention", { cache: "no-store" }),
-      fetch("/api/v1/actions", { cache: "no-store" }),
-      fetch("/api/v1/cases", { cache: "no-store" }),
+      readJson<{ attentions: Attention[] }>("/api/v1/attention"),
+      readJson<{ actions: Action[] }>("/api/v1/actions"),
+      readJson<{ cases: CaseItem[] }>("/api/v1/cases"),
     ]);
-    if (responses.every((r) => r.ok)) {
-      setAttentions((await responses[0].json()).attentions);
-      setActions((await responses[1].json()).actions);
-      setCases((await responses[2].json()).cases);
-    }
+    setAttentions(responses[0].data.attentions);
+    setActions(responses[1].data.actions);
+    setCases(responses[2].data.cases);
   }
   useEffect(() => {
     void Promise.all([
-      fetch("/api/v1/attention", { cache: "no-store" }),
-      fetch("/api/v1/actions", { cache: "no-store" }),
-      fetch("/api/v1/cases", { cache: "no-store" }),
-    ]).then(async (responses) => {
-      if (responses.every((response) => response.ok)) {
-        setAttentions((await responses[0].json()).attentions);
-        setActions((await responses[1].json()).actions);
-        setCases((await responses[2].json()).cases);
-      }
-    });
+      readJson<{ attentions: Attention[] }>("/api/v1/attention"),
+      readJson<{ actions: Action[] }>("/api/v1/actions"),
+      readJson<{ cases: CaseItem[] }>("/api/v1/cases"),
+    ])
+      .then(async (responses) => {
+        setAttentions(responses[0].data.attentions);
+        setActions(responses[1].data.actions);
+        setCases(responses[2].data.cases);
+      })
+      .catch(() => undefined);
   }, []);
   async function act(path: string, body: unknown) {
     await command(path, body);

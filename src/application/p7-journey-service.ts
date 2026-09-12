@@ -11,12 +11,13 @@ export class P7JourneyService {
     const rows = await this.tx<
       {
         account_id: string;
+        workspace_id: string;
         display_name: string;
         login_name: string;
         role: RequestActor["role"];
         workspace_name: string;
       }[]
-    >`select a.id account_id,p.display_name,a.normalized_login_name login_name,a.role,w.name workspace_name
+    >`select a.id account_id,a.workspace_id,p.display_name,a.normalized_login_name login_name,a.role,w.name workspace_name
       from app.login_accounts a join app.persons p on p.id=a.person_id join app.workspaces w on w.id=a.workspace_id
       where a.id=${this.actor.accountId}::uuid`;
     return rows[0];

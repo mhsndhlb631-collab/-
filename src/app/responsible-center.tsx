@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent, useEffect, useState } from "react";
+import { readJson } from "../offline/client";
 
 type Today = {
   counts: {
@@ -81,21 +82,22 @@ export function ResponsibleCenter() {
     [busy, setBusy] = useState(false);
   async function refresh() {
     const [todayResponse, mentorsResponse] = await Promise.all([
-      fetch("/api/v1/today", { cache: "no-store" }),
-      fetch("/api/v1/mentors", { cache: "no-store" }),
+      readJson<Today>("/api/v1/today"),
+      readJson<{ mentors: Mentor[] }>("/api/v1/mentors"),
     ]);
-    if (todayResponse.ok) setToday(await todayResponse.json());
-    if (mentorsResponse.ok) setMentors((await mentorsResponse.json()).mentors);
+    setToday(todayResponse.data);
+    setMentors(mentorsResponse.data.mentors);
   }
   useEffect(() => {
     void Promise.all([
-      fetch("/api/v1/today", { cache: "no-store" }),
-      fetch("/api/v1/mentors", { cache: "no-store" }),
-    ]).then(async ([todayResponse, mentorsResponse]) => {
-      if (todayResponse.ok) setToday(await todayResponse.json());
-      if (mentorsResponse.ok)
-        setMentors((await mentorsResponse.json()).mentors);
-    });
+      readJson<Today>("/api/v1/today"),
+      readJson<{ mentors: Mentor[] }>("/api/v1/mentors"),
+    ])
+      .then(([todayResponse, mentorsResponse]) => {
+        setToday(todayResponse.data);
+        setMentors(mentorsResponse.data.mentors);
+      })
+      .catch(() => undefined);
   }, []);
   async function loadPerformance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

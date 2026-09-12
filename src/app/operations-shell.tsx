@@ -10,6 +10,14 @@ import { PeopleWorkspace } from "./people-workspace";
 import { DistributionWorkspace } from "./distribution-workspace";
 import { PremiumToday } from "./premium-today";
 import { QiwamIcon, type QiwamIconName } from "./qiwam-icon";
+import {
+  deviceRepository,
+  OfflineReadError,
+  readJson,
+  restoreAuthenticatedIdentity,
+  saveAuthenticatedIdentity,
+  setOfflineScope,
+} from "../offline/client";
 
 type Overview = {
   actor_role: "RESPONSIBLE" | "MENTOR" | "STUDENT";
@@ -48,6 +56,7 @@ const empty: Overview = {
 
 type Me = {
   account_id: string;
+  workspace_id: string;
   display_name: string;
   login_name: string;
   role: Overview["actor_role"];
@@ -154,53 +163,57 @@ export function OperationsShell() {
     window.localStorage.setItem("qiwam-theme", next);
   }
   async function load() {
-    const [meResponse, response, sessionsResponse] = await Promise.all([
-      fetch("/api/v1/me", { cache: "no-store" }),
-      fetch("/api/v1/programs", { cache: "no-store" }),
-      fetch("/api/v1/sessions", { cache: "no-store" }),
-    ]);
-    if (meResponse.status === 401) {
-      setSignedIn(false);
-      setMe(null);
-      return false;
+    const cachedIdentity = await restoreAuthenticatedIdentity<Me>();
+    let identityResult;
+    try {
+      identityResult = await readJson<Me>("/api/v1/me", {
+        scope: cachedIdentity?.scope.id,
+      });
+    } catch (error) {
+      if (error instanceof OfflineReadError && error.code === "UNAUTHORIZED") {
+        if (cachedIdentity)
+          await deviceRepository().revokeScope(cachedIdentity.scope.id);
+        setOfflineScope(null);
+        setSignedIn(false);
+        setMe(null);
+        return false;
+      }
+      throw error;
     }
-    if (!meResponse.ok || !response.ok || !sessionsResponse.ok)
-      throw new Error("تعذر تحميل مساحة العمل.");
-    const identity = (await meResponse.json()) as Me;
+    const identity = identityResult.data;
+    const scope =
+      identityResult.source === "server"
+        ? await saveAuthenticatedIdentity(identity)
+        : cachedIdentity?.scope;
+    if (!scope) throw new Error("تعذر استعادة مساحة العمل المحفوظة.");
+    const [overviewResult, sessionsResult] = await Promise.all([
+      readJson<Omit<Overview, "sessions">>("/api/v1/programs", {
+        scope: scope.id,
+      }),
+      readJson<{ sessions: Overview["sessions"] }>("/api/v1/sessions", {
+        scope: scope.id,
+      }),
+    ]);
     setMe(identity);
     setData({
-      ...(await response.json()),
-      sessions: (await sessionsResponse.json()).sessions,
+      ...overviewResult.data,
+      sessions: sessionsResult.data.sessions,
     });
     setSignedIn(true);
     return true;
   }
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([
-      fetch("/api/v1/me", { cache: "no-store" }),
-      fetch("/api/v1/programs", { cache: "no-store" }),
-      fetch("/api/v1/sessions", { cache: "no-store" }),
-    ])
-      .then(async ([meResponse, response, sessionsResponse]) => {
-        if (!meResponse.ok || !response.ok || !sessionsResponse.ok) return null;
-        return {
-          identity: (await meResponse.json()) as Me,
-          overview: await response.json(),
-          sessions: (await sessionsResponse.json()).sessions,
-        };
-      })
-      .then((result) => {
-        if (cancelled || !result) return;
-        setMe(result.identity);
-        setData({ ...result.overview, sessions: result.sessions });
-        setSignedIn(true);
-      })
-      .finally(() => {
-        if (!cancelled) setInitializing(false);
-      });
+    const initialize = window.setTimeout(() => {
+      void load()
+        .catch(() => undefined)
+        .finally(() => {
+          if (!cancelled) setInitializing(false);
+        });
+    }, 0);
     return () => {
       cancelled = true;
+      window.clearTimeout(initialize);
     };
   }, []);
   async function command(path: string, body: unknown, method = "POST") {
@@ -300,6 +313,7 @@ export function OperationsShell() {
     try {
       await fetch("/api/v1/auth/logout", { method: "POST" });
     } finally {
+      setOfflineScope(null);
       setSignedIn(false);
       setMe(null);
       setActiveView("today");
@@ -1343,10 +1357,12 @@ function SessionWorkspace({
 }) {
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   async function openDetail(id: string) {
-    const response = await fetch(`/api/v1/sessions/${id}`, {
-      cache: "no-store",
-    });
-    if (response.ok) setDetail(await response.json());
+    try {
+      const result = await readJson<SessionDetail>(`/api/v1/sessions/${id}`);
+      setDetail(result.data);
+    } catch {
+      // The existing empty state remains if this session has never been synchronized.
+    }
   }
   async function act(path: string, body: unknown, method = "POST") {
     await command(path, body, method);

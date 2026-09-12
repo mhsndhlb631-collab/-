@@ -50,9 +50,13 @@ export class OfflineRepository {
     return this.db.scopes
       .where("accessState")
       .equals("active")
-      .reverse()
-      .sortBy("lastValidatedAt")
-      .then((rows) => rows.at(0) ?? null);
+      .toArray()
+      .then(
+        (rows) =>
+          rows.sort((left, right) =>
+            right.lastValidatedAt.localeCompare(left.lastValidatedAt),
+          )[0] ?? null,
+      );
   }
 
   async revokeScope(targetScopeId: string) {
