@@ -22,6 +22,7 @@ import {
 import { CommandError, writeJson } from "../offline/commands";
 import { startOfflineRuntime } from "../offline/runtime";
 import { SyncStatus } from "./sync-status";
+import { mobileDestinations } from "./mobile-navigation";
 
 type Overview = {
   actor_role: "RESPONSIBLE" | "MENTOR" | "STUDENT";
@@ -606,6 +607,7 @@ export function OperationsShell() {
         .includes(normalizedQuery),
     )
     .slice(0, 12);
+  const mobileViews = mobileDestinations(data.actor_role);
   return (
     <main
       className={`dashboard app-theme-${theme}${sidebarCollapsed ? " sidebar-is-collapsed" : ""}`}
@@ -1004,6 +1006,36 @@ export function OperationsShell() {
           )}
         </div>
       </section>
+      <nav className="mobile-bottom-nav" aria-label="التنقل الرئيسي للهاتف">
+        {mobileViews.map((item) => (
+          <button
+            type="button"
+            key={item.view}
+            aria-current={activeView === item.view ? "page" : undefined}
+            onClick={() => setActiveView(item.view)}
+          >
+            <QiwamIcon
+              name={item.icon}
+              size={21}
+              weight={activeView === item.view ? "bold" : "regular"}
+            />
+            <span>{item.label}</span>
+          </button>
+        ))}
+        <button
+          type="button"
+          className={
+            mobileViews.some((item) => item.view === activeView)
+              ? undefined
+              : "is-active"
+          }
+          aria-expanded={mobileNavOpen}
+          onClick={() => setMobileNavOpen(true)}
+        >
+          <QiwamIcon name="menu" size={21} />
+          <span>المزيد</span>
+        </button>
+      </nav>
       {paletteOpen && (
         <div
           className="palette-backdrop"
