@@ -429,8 +429,10 @@ label {
 }
 .brand-mark {
   position: absolute;
-  left: 8%;
-  bottom: 8%;
+  top: clamp(28px, 5vw, 54px);
+  right: auto;
+  bottom: auto;
+  left: clamp(28px, 5vw, 54px);
   display: grid;
   place-items: center;
   width: 92px;
@@ -2397,6 +2399,13 @@ kbd {
 .login-page .brand-panel > * {
   position: relative;
   z-index: 1;
+}
+.login-page .brand-panel > .brand-mark {
+  position: absolute;
+  top: clamp(28px, 5vw, 54px);
+  right: auto;
+  bottom: auto;
+  left: clamp(28px, 5vw, 54px);
 }
 .login-page .login-card {
   color: #f8fafc;
