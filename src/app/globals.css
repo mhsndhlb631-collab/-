@@ -3883,6 +3883,194 @@ textarea {
   border-radius: 14px;
   background: color-mix(in srgb, var(--green) 5%, var(--q-card, #fffefa));
 }
+
+/* Fast field capture */
+.roster-toolbar,
+.roster-save-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--q-border, var(--line));
+  border-radius: 12px;
+  background: var(--q-surface, #fffefa);
+}
+.roster-toolbar > div {
+  display: grid;
+  gap: 0.12rem;
+}
+.roster-toolbar span,
+.roster-save-bar span {
+  color: var(--q-muted, var(--muted));
+  font-size: 0.72rem;
+}
+.roster-card {
+  border-inline-start: 3px solid var(--q-border, var(--line));
+}
+.roster-card.attendance-present {
+  border-inline-start-color: #368069;
+}
+.roster-card.attendance-late {
+  border-inline-start-color: #b27b2c;
+}
+.roster-card.attendance-excused_absence,
+.roster-card.attendance-unexcused_absence {
+  border-inline-start-color: #a95745;
+}
+.roster-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.roster-card > header span {
+  color: var(--q-muted, var(--muted));
+  font-size: 0.7rem;
+}
+.attendance-chips {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.attendance-chips legend {
+  margin-block-end: 0.4rem;
+  color: var(--q-muted, var(--muted));
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.attendance-chips {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+.attendance-chips label {
+  min-width: 0;
+}
+.attendance-chips input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.attendance-chips span {
+  min-height: 40px;
+  padding: 0.35rem;
+  border: 1px solid var(--q-border, var(--line));
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--q-muted, var(--muted));
+  background: var(--q-surface, #fff);
+  font-size: 0.72rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+.attendance-chips input:checked + span {
+  border-color: color-mix(in srgb, var(--green) 55%, var(--q-border));
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 9%, transparent);
+}
+.attendance-chips input:focus-visible + span {
+  outline: 2px solid var(--gold, #b9822e);
+  outline-offset: 2px;
+}
+.binary-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin-block-start: 0.35rem;
+}
+.binary-choice label {
+  min-width: 0;
+}
+.binary-choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.binary-choice label > span {
+  min-height: 42px;
+  border: 1px solid var(--q-border, var(--line));
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--q-surface, #fff);
+  color: var(--q-muted, var(--muted));
+  cursor: pointer;
+}
+.binary-choice input:checked + span {
+  border-color: color-mix(in srgb, var(--green) 55%, var(--q-border));
+  background: color-mix(in srgb, var(--green) 9%, transparent);
+  color: var(--green);
+  font-weight: 750;
+}
+.binary-choice input:focus-visible + span {
+  outline: 2px solid var(--gold, #b9822e);
+  outline-offset: 2px;
+}
+.roster-save-bar {
+  position: sticky;
+  inset-block-end: 0.5rem;
+  z-index: 12;
+  box-shadow: 0 10px 28px rgb(20 36 31 / 13%);
+}
+.roster-save-bar button {
+  min-width: 130px;
+}
+@media (max-width: 800px) {
+  .session-workspace {
+    overflow: visible;
+  }
+  .session-actions {
+    position: sticky;
+    inset-block-start: 68px;
+    z-index: 14;
+    padding: 9px;
+    border: 1px solid var(--q-border, var(--line));
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--q-bg, #f7f8f6) 94%, transparent);
+    backdrop-filter: blur(14px);
+  }
+  .roster-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
+  }
+  .roster-toolbar,
+  .roster-save-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .roster-toolbar button,
+  .roster-save-bar button {
+    width: 100%;
+    min-height: 46px;
+  }
+  .roster-card {
+    padding: 12px;
+  }
+  .attendance-chips span {
+    min-height: 44px;
+  }
+  .roster-save-bar {
+    inset-block-end: calc(68px + env(safe-area-inset-bottom));
+  }
+  .tracking-grid > article,
+  .learning-grid > article,
+  .learning-item {
+    padding: 12px;
+  }
+  .tracking-grid form,
+  .inline-form,
+  .compact-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tracking-grid form button,
+  .inline-form button,
+  .review-actions button {
+    width: 100%;
+  }
+}
 .today-focus-card.is-attention {
   border-color: color-mix(in srgb, #a95745 34%, var(--line));
   background: color-mix(in srgb, #a95745 6%, var(--q-card, #fffefa));

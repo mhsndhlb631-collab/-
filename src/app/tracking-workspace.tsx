@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { readJson } from "../offline/client";
 
 type TrackingItem = {
@@ -131,6 +131,17 @@ export function TrackingWorkspace({
     });
     await load();
   }
+  const displayItems = useMemo(
+    () =>
+      [...items].sort((left, right) => {
+        const dayOrder = left.period_start.localeCompare(right.period_start);
+        if (dayOrder) return dayOrder;
+        const leftDone = left.entry ? 1 : 0;
+        const rightDone = right.entry ? 1 : 0;
+        return leftDone - rightDone;
+      }),
+    [items],
+  );
   return (
     <section className="panel table-panel tracking-workspace">
       <div className="panel-heading">
@@ -146,7 +157,7 @@ export function TrackingWorkspace({
         <p className="empty">جارٍ حساب الاستحقاقات…</p>
       ) : items.length ? (
         <div className="tracking-grid">
-          {items.map((item) => (
+          {displayItems.map((item) => (
             <article
               key={`${item.enrollment_id}-${item.definition_id}-${item.period_start}`}
             >
@@ -178,13 +189,26 @@ export function TrackingWorkspace({
                 <label>
                   القيمة {item.unit && `(${item.unit})`}
                   {item.value_type === "BOOLEAN" ? (
-                    <select
-                      name="value"
-                      defaultValue={String(item.entry?.value ?? "true")}
-                    >
-                      <option value="true">تم</option>
-                      <option value="false">لم يتم</option>
-                    </select>
+                    <span className="binary-choice">
+                      <label>
+                        <input
+                          type="radio"
+                          name="value"
+                          value="true"
+                          defaultChecked={item.entry?.value !== false}
+                        />
+                        <span>تم</span>
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          name="value"
+                          value="false"
+                          defaultChecked={item.entry?.value === false}
+                        />
+                        <span>لم يتم</span>
+                      </label>
+                    </span>
                   ) : (
                     <input
                       name="value"

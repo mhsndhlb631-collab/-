@@ -1398,17 +1398,28 @@ function SessionWorkspace({
   sessions: SessionSummary[];
   command: (path: string, body: unknown, method?: string) => Promise<unknown>;
 }) {
-  const [detail, setDetail] = useState<SessionDetail | null>(null);
+  const [detail, setDetail] = useState<SessionDetail | null>(null),
+    [dirty, setDirty] = useState(false),
+    [recordedCount, setRecordedCount] = useState(0),
+    [markAllVersion, setMarkAllVersion] = useState(0);
   async function openDetail(id: string) {
     try {
       const result = await readJson<SessionDetail>(`/api/v1/sessions/${id}`);
       setDetail(result.data);
+      setDirty(false);
+      setMarkAllVersion(0);
+      setRecordedCount(
+        result.data.roster.filter(
+          (row) => row.attendance_status !== "NOT_RECORDED",
+        ).length,
+      );
     } catch {
       // The existing empty state remains if this session has never been synchronized.
     }
   }
   async function act(path: string, body: unknown, method = "POST") {
     await command(path, body, method);
+    setDirty(false);
     await openDetail(detail?.session.id ?? path.split("/")[4]);
   }
   return (
@@ -1475,20 +1486,31 @@ function SessionWorkspace({
             )}
             {detail.session.status === "OPEN" && (
               <button
-                disabled={busy}
+                disabled={busy || dirty}
+                title={dirty ? "احفظ تعديلات الحضور أولًا" : undefined}
                 onClick={() =>
                   void act(`/api/v1/sessions/${detail.session.id}/close`, {
                     row_version: detail.session.row_version,
                   })
                 }
               >
-                إغلاق الجلسة
+                {dirty ? "احفظ قبل الإغلاق" : "إغلاق الجلسة"}
               </button>
             )}
           </div>
           {detail.session.status === "OPEN" && (
             <form
               className="roster-grid"
+              onChange={(event) => {
+                setDirty(true);
+                const form = event.currentTarget;
+                const values = new FormData(form);
+                setRecordedCount(
+                  detail.roster.filter(
+                    (row) => values.get(`a-${row.id}`) !== null,
+                  ).length,
+                );
+              }}
               onSubmit={(e) => {
                 e.preventDefault();
                 const f = new FormData(e.currentTarget),
@@ -1531,10 +1553,38 @@ function SessionWorkspace({
                 );
               }}
             >
+              <div className="roster-toolbar">
+                <div>
+                  <strong>
+                    سُجّل {recordedCount} من {detail.roster.length}
+                  </strong>
+                  <span>يمكنك الحفظ والمتابعة لاحقًا</span>
+                </div>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    setMarkAllVersion((value) => value + 1);
+                    setRecordedCount(detail.roster.length);
+                    setDirty(true);
+                  }}
+                >
+                  تحديد الكل حاضر
+                </button>
+              </div>
               {detail.roster.map((r) => (
-                <RosterFields key={r.id} row={r} />
+                <RosterFields
+                  key={`${r.id}-${markAllVersion}`}
+                  row={r}
+                  markPresent={markAllVersion > 0}
+                />
               ))}
-              <button disabled={busy}>حفظ السجل</button>
+              <div className="roster-save-bar">
+                <span>{dirty ? "توجد تغييرات غير محفوظة" : "السجل محفوظ"}</span>
+                <button disabled={busy || !dirty}>
+                  {busy ? "جارٍ الحفظ…" : "حفظ السجل"}
+                </button>
+              </div>
             </form>
           )}
           {detail.session.status === "CLOSED" && (
@@ -1569,29 +1619,45 @@ const attendanceLabels: Record<string, string> = {
   EXCUSED_ABSENCE: "غائب بعذر",
   UNEXCUSED_ABSENCE: "غائب بلا عذر",
 };
-function RosterFields({ row }: { row: SessionDetail["roster"][number] }) {
-  const [attendance, setAttendance] = useState(row.attendance_status);
+function RosterFields({
+  row,
+  markPresent,
+}: {
+  row: SessionDetail["roster"][number];
+  markPresent: boolean;
+}) {
+  const [attendance, setAttendance] = useState(
+    markPresent ? "PRESENT" : row.attendance_status,
+  );
   const absent = ["EXCUSED_ABSENCE", "UNEXCUSED_ABSENCE"].includes(attendance);
+  const options = [
+    ["PRESENT", "حاضر"],
+    ["LATE", "متأخر"],
+    ["EXCUSED_ABSENCE", "بعذر"],
+    ["UNEXCUSED_ABSENCE", "غائب"],
+  ];
   return (
-    <article>
-      <h3>{row.display_name}</h3>
-      <label>
-        الحضور
-        <select
-          name={`a-${row.id}`}
-          value={attendance}
-          onChange={(event) => setAttendance(event.target.value)}
-          required
-        >
-          <option value="NOT_RECORDED" disabled>
-            لم يسجل
-          </option>
-          <option value="PRESENT">حاضر</option>
-          <option value="LATE">متأخر</option>
-          <option value="EXCUSED_ABSENCE">غائب بعذر</option>
-          <option value="UNEXCUSED_ABSENCE">غائب بلا عذر</option>
-        </select>
-      </label>
+    <article className={`roster-card attendance-${attendance.toLowerCase()}`}>
+      <header>
+        <h3>{row.display_name}</h3>
+        <span>{attendanceLabels[attendance]}</span>
+      </header>
+      <fieldset className="attendance-chips">
+        <legend>الحضور</legend>
+        {options.map(([value, label]) => (
+          <label key={value}>
+            <input
+              type="radio"
+              name={`a-${row.id}`}
+              value={value}
+              checked={attendance === value}
+              onChange={() => setAttendance(value)}
+              required
+            />
+            <span>{label}</span>
+          </label>
+        ))}
+      </fieldset>
       {absent && (
         <label>
           سبب الغياب
