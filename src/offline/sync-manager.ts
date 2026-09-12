@@ -53,8 +53,9 @@ export class SyncManager {
         if (dependenciesReady.some((ready) => !ready)) continue;
         await this.repository.markSyncing(item);
         try {
+          const prepared = await this.materialize(item);
           const acknowledgement = await this.transport({
-            ...item,
+            ...prepared,
             attempts: item.attempts + 1,
           });
           await this.handleAcknowledgement(item, acknowledgement);
@@ -73,6 +74,36 @@ export class SyncManager {
     } finally {
       this.running = false;
     }
+  }
+
+  private async materialize(item: OutboxItem) {
+    const replacements = new Map<string, string>();
+    for (const dependencyId of item.dependencies) {
+      const dependency = await this.repository.outboxItem(dependencyId);
+      if (!dependency) continue;
+      const serverId = await this.repository.resolveServerId(
+        item.scopeId,
+        dependency.entityId,
+      );
+      if (serverId) replacements.set(dependency.entityId, serverId);
+    }
+    if (!replacements.size) return item;
+    const replace = (value: unknown): unknown => {
+      if (typeof value === "string") return replacements.get(value) ?? value;
+      if (Array.isArray(value)) return value.map(replace);
+      if (value && typeof value === "object")
+        return Object.fromEntries(
+          Object.entries(value).map(([key, nested]) => [key, replace(nested)]),
+        );
+      return value;
+    };
+    let path = item.path;
+    for (const [localId, serverId] of replacements)
+      path = path.replaceAll(
+        encodeURIComponent(localId),
+        encodeURIComponent(serverId),
+      );
+    return { ...item, path, payload: replace(item.payload) };
   }
 
   private async handleAcknowledgement(

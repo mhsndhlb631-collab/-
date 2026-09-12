@@ -319,6 +319,8 @@ async function enqueue(
     applyLearningOptimism(scope, path, body, mutationId),
     applyFollowupOptimism(scope, path, mutationId),
   ]);
+  if (typeof window !== "undefined")
+    window.dispatchEvent(new CustomEvent("minhaj:outbox-changed"));
   return {
     id: identity.entityId,
     queued_offline: true,

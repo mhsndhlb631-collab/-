@@ -118,6 +118,49 @@ describe("SyncManager", () => {
     expect(sent).toEqual(["parent", "child"]);
   });
 
+  it("replaces a local parent id in dependent paths and payloads", async () => {
+    const { repository } = setup();
+    const parent = await repository.enqueue({
+      ...mutation,
+      id: "parent",
+      entityType: "session",
+      entityId: "local-session",
+      operation: "CREATE",
+    });
+    await repository.acknowledge(
+      parent,
+      { id: "server-session" },
+      "request-parent",
+    );
+    await repository.enqueue({
+      ...mutation,
+      id: "child",
+      entityId: "attendance-1",
+      path: "/api/v1/sessions/local-session/records",
+      payload: { session_id: "local-session" },
+      dependencies: ["parent"],
+    });
+    const sent: Array<{ path: string; payload: unknown }> = [];
+    const manager = new SyncManager(repository, async (item) => {
+      sent.push({ path: item.path, payload: item.payload });
+      return {
+        ok: true,
+        status: 200,
+        body: { id: "attendance-1" },
+        requestId: "r",
+      };
+    });
+
+    await manager.run("scope-1");
+
+    expect(sent).toEqual([
+      {
+        path: "/api/v1/sessions/server-session/records",
+        payload: { session_id: "server-session" },
+      },
+    ]);
+  });
+
   it("classifies version conflicts and does not retry them", async () => {
     const { db, repository } = setup();
     await repository.enqueue({ ...mutation, id: "conflicted" });
@@ -141,7 +184,9 @@ describe("SyncManager", () => {
 
   it("does not send a later edit to the same record before the first is acknowledged", async () => {
     const { db, repository } = setup();
-    await repository.enqueue({ ...mutation, id: "first-edit" });
+    const first = await repository.enqueue({ ...mutation, id: "first-edit" });
+    // Once a request may have reached the server it must no longer be coalesced.
+    await repository.markSyncing(first);
     await repository.enqueue({ ...mutation, id: "second-edit" });
     const transport = vi.fn().mockResolvedValue({
       ok: false,

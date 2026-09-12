@@ -20,6 +20,7 @@ import {
   setOfflineScope,
 } from "../offline/client";
 import { CommandError, writeJson } from "../offline/commands";
+import { startOfflineRuntime } from "../offline/runtime";
 
 type Overview = {
   actor_role: "RESPONSIBLE" | "MENTOR" | "STUDENT";
@@ -158,6 +159,11 @@ export function OperationsShell() {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, []);
+  useEffect(() => {
+    const scope = activeScopeId();
+    if (!signedIn || !scope) return;
+    return startOfflineRuntime(scope);
+  }, [signedIn]);
 
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";

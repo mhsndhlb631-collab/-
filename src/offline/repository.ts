@@ -141,6 +141,7 @@ export class OfflineRepository {
       requestId: null,
     };
 
+    let storedOutbox = outbox;
     await this.db.transaction(
       "rw",
       this.db.records,
@@ -157,8 +158,26 @@ export class OfflineRepository {
           )
           .sortBy("createdAt");
         const predecessor = previous.at(-1)?.id;
-        if (predecessor && !outbox.dependencies.includes(predecessor))
-          outbox.dependencies.push(predecessor);
+        const prior = previous.at(-1);
+        const canCoalesce =
+          prior?.status === "pending" &&
+          prior.attempts === 0 &&
+          prior.operation === "UPDATE" &&
+          input.operation === "UPDATE" &&
+          prior.path === input.path;
+        if (canCoalesce) {
+          storedOutbox = {
+            ...prior,
+            payload: input.payload,
+            updatedAt: timestamp,
+            error: null,
+          };
+          await this.db.outbox.put(storedOutbox);
+        } else {
+          if (predecessor && !outbox.dependencies.includes(predecessor))
+            outbox.dependencies.push(predecessor);
+          await this.db.outbox.add(outbox);
+        }
         const current = await this.db.records.get(recordId);
         const record: OfflineRecord = {
           id: recordId,
@@ -169,17 +188,16 @@ export class OfflineRepository {
           data: input.optimisticData ?? current?.data ?? input.payload,
           syncStatus: recordSyncStatus(input.operation),
           baseVersion: input.baseVersion ?? current?.baseVersion ?? null,
-          deviceMutationId: mutationId,
+          deviceMutationId: storedOutbox.id,
           createdAt: current?.createdAt ?? timestamp,
           updatedAt: timestamp,
           lastSyncedAt: current?.lastSyncedAt ?? null,
           deletedAt: input.operation === "DELETE" ? timestamp : null,
         };
         await this.db.records.put(record);
-        await this.db.outbox.add(outbox);
       },
     );
-    return outbox;
+    return storedOutbox;
   }
 
   pending(targetScopeId: string) {
@@ -340,6 +358,27 @@ export class OfflineRepository {
 
   async dependencyIsSynced(id: string) {
     return (await this.db.outbox.get(id))?.status === "synced";
+  }
+
+  outboxItem(id: string) {
+    return this.db.outbox.get(id);
+  }
+
+  async resumeBlockedAuth(targetScopeId: string) {
+    const blocked = await this.db.outbox
+      .where("scopeId")
+      .equals(targetScopeId)
+      .filter((item) => item.status === "blocked_auth")
+      .toArray();
+    await this.db.transaction("rw", this.db.outbox, async () => {
+      for (const item of blocked)
+        await this.db.outbox.update(item.id, {
+          status: "pending",
+          nextAttemptAt: null,
+          updatedAt: now(),
+        });
+    });
+    return blocked.length;
   }
 
   async resolveServerId(targetScopeId: string, localId: string) {

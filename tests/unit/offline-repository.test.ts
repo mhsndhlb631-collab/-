@@ -115,6 +115,39 @@ describe("OfflineRepository", () => {
     });
   });
 
+  it("coalesces rapid unsent updates to the final intended value", async () => {
+    const db = database();
+    const repository = new OfflineRepository(db);
+    const base = {
+      scopeId: "scope-1",
+      entityType: "attendance",
+      entityId: "roster-1",
+      operation: "UPDATE" as const,
+      command: "SAVE_ATTENDANCE",
+      method: "PUT" as const,
+      path: "/api/v1/sessions/session-1/records",
+      dependencies: [] as string[],
+    };
+    const first = await repository.enqueue({
+      ...base,
+      id: "first-intent",
+      payload: { status: "ABSENT" },
+    });
+    const second = await repository.enqueue({
+      ...base,
+      id: "final-intent",
+      payload: { status: "PRESENT" },
+    });
+
+    expect(second.id).toBe(first.id);
+    expect(await repository.pending("scope-1")).toHaveLength(1);
+    expect(await db.outbox.get(first.id)).toMatchObject({
+      idempotencyKey: "first-intent",
+      payload: { status: "PRESENT" },
+      attempts: 0,
+    });
+  });
+
   it("never purges pending, failed, or conflict mutations", async () => {
     const db = database();
     const repository = new OfflineRepository(db);
