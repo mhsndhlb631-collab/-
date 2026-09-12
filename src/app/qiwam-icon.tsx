@@ -2,6 +2,7 @@
 
 import {
   ArrowUpRightIcon,
+  ArrowsClockwiseIcon,
   BellIcon,
   BookOpenTextIcon,
   CalendarCheckIcon,
@@ -68,6 +69,7 @@ export type QiwamIconName =
   | "trend-down"
   | "minus"
   | "external"
+  | "sync"
   | "calendar-check"
   | "student"
   | "notebook"
@@ -104,6 +106,7 @@ const icons: Record<QiwamIconName, Icon> = {
   "trend-down": TrendDownIcon,
   minus: MinusIcon,
   external: ArrowUpRightIcon,
+  sync: ArrowsClockwiseIcon,
   "calendar-check": CalendarCheckIcon,
   student: StudentIcon,
   notebook: NotebookIcon,

@@ -27,6 +27,14 @@ export async function synchronizeNow() {
   if (!scope) return { processed: 0, skipped: true };
   manager ??= new SyncManager(deviceRepository(), httpSyncTransport());
   const result = await withBrowserLock(scope, () => manager!.run(scope));
+  const repository = deviceRepository();
+  const counts = await repository.counts(scope);
+  if (connectivity.current().kind === "online" && counts.pending === 0)
+    await repository.setMeta(`last-sync:${scope}`, new Date().toISOString());
+  const retentionCutoff = new Date(
+    Date.now() - 30 * 24 * 60 * 60 * 1_000,
+  ).toISOString();
+  await repository.purgeSyncedBefore(scope, retentionCutoff);
   notify();
   if (typeof window !== "undefined")
     window.dispatchEvent(new CustomEvent("minhaj:sync-finished"));

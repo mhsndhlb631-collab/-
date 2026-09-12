@@ -21,6 +21,7 @@ import {
 } from "../offline/client";
 import { CommandError, writeJson } from "../offline/commands";
 import { startOfflineRuntime } from "../offline/runtime";
+import { SyncStatus } from "./sync-status";
 
 type Overview = {
   actor_role: "RESPONSIBLE" | "MENTOR" | "STUDENT";
@@ -821,6 +822,7 @@ export function OperationsShell() {
                 </div>
               </section>
             )}
+            <SyncStatus />
             <span className="status-dot">{me?.workspace_name ?? "متصل"}</span>
             <button
               type="button"

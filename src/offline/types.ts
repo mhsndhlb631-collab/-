@@ -17,7 +17,8 @@ export type OutboxStatus =
   | "failed_permission"
   | "failed_missing_dependency"
   | "blocked_auth"
-  | "conflict";
+  | "conflict"
+  | "discarded";
 
 export type ConnectivityKind =
   "online" | "offline" | "degraded" | "server_error" | "auth_required";

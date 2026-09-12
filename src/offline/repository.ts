@@ -3,6 +3,7 @@ import type {
   OfflineRecord,
   OfflineScope,
   OfflineSnapshot,
+  OfflineConflict,
   OutboxItem,
   QueuedMutation,
   SafeSyncError,
@@ -314,7 +315,10 @@ export class OfflineRepository {
 
   async fail(
     item: OutboxItem,
-    status: Exclude<OutboxItem["status"], "pending" | "syncing" | "synced">,
+    status: Exclude<
+      OutboxItem["status"],
+      "pending" | "syncing" | "synced" | "discarded"
+    >,
     error: SafeSyncError,
   ) {
     const recordStatus = status === "conflict" ? "conflict" : "failed";
@@ -362,6 +366,67 @@ export class OfflineRepository {
 
   outboxItem(id: string) {
     return this.db.outbox.get(id);
+  }
+
+  async failures(targetScopeId: string) {
+    return this.db.outbox
+      .where("scopeId")
+      .equals(targetScopeId)
+      .filter((item) =>
+        [
+          "failed_validation",
+          "failed_permission",
+          "failed_missing_dependency",
+          "blocked_auth",
+        ].includes(item.status),
+      )
+      .sortBy("updatedAt");
+  }
+
+  async unresolvedConflicts(targetScopeId: string) {
+    return this.db.conflicts
+      .where("scopeId")
+      .equals(targetScopeId)
+      .filter((item) => !item.resolvedAt)
+      .sortBy("createdAt");
+  }
+
+  async discardConflict(conflict: OfflineConflict) {
+    const timestamp = now();
+    await this.db.transaction(
+      "rw",
+      this.db.conflicts,
+      this.db.outbox,
+      this.db.records,
+      async () => {
+        await this.db.conflicts.update(conflict.id, { resolvedAt: timestamp });
+        await this.db.outbox.update(conflict.outboxId, {
+          status: "discarded",
+          updatedAt: timestamp,
+          nextAttemptAt: null,
+        });
+        await this.db.records.update(
+          scopedRecordId(
+            conflict.scopeId,
+            conflict.entityType,
+            conflict.entityId,
+          ),
+          {
+            syncStatus: "synced",
+            deviceMutationId: null,
+            updatedAt: timestamp,
+          },
+        );
+      },
+    );
+  }
+
+  async setMeta(key: string, value: unknown) {
+    await this.db.meta.put({ key, value, updatedAt: now() });
+  }
+
+  async metaValue<T>(key: string) {
+    return ((await this.db.meta.get(key))?.value as T | undefined) ?? null;
   }
 
   async resumeBlockedAuth(targetScopeId: string) {

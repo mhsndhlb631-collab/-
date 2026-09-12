@@ -38,6 +38,15 @@ function firstRowVersion(value: unknown): number | null {
   return null;
 }
 
+function storageIsFull(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { name?: string; inner?: { name?: string } };
+  return (
+    candidate.name === "QuotaExceededError" ||
+    candidate.inner?.name === "QuotaExceededError"
+  );
+}
+
 function mutationIdentity(path: string, mutationId: string) {
   if (path.includes("/sessions/"))
     return { entityType: "session", entityId: pathId(path, "sessions")! };
@@ -298,21 +307,33 @@ async function enqueue(
   const scope = activeScopeId();
   if (!scope) throw new Error("OFFLINE_SCOPE_UNAVAILABLE");
   const identity = mutationIdentity(path, mutationId);
-  const item = await deviceRepository().enqueue({
-    id: mutationId,
-    idempotencyKey,
-    scopeId: scope,
-    entityType: identity.entityType,
-    entityId: identity.entityId,
-    operation: operation(method, path),
-    command: commandName(method, path),
-    method,
-    path,
-    payload: body,
-    dependencies: [],
-    baseVersion: firstRowVersion(body),
-    optimisticData: body,
-  });
+  let item;
+  try {
+    item = await deviceRepository().enqueue({
+      id: mutationId,
+      idempotencyKey,
+      scopeId: scope,
+      entityType: identity.entityType,
+      entityId: identity.entityId,
+      operation: operation(method, path),
+      command: commandName(method, path),
+      method,
+      path,
+      payload: body,
+      dependencies: [],
+      baseVersion: firstRowVersion(body),
+      optimisticData: body,
+    });
+  } catch (error) {
+    if (storageIsFull(error))
+      throw new CommandError(
+        "مساحة الحفظ على الجهاز ممتلئة. اتصل بالإنترنت ثم حاول المزامنة مرة أخرى.",
+        507,
+        "DEVICE_STORAGE_FULL",
+        null,
+      );
+    throw error;
+  }
   await Promise.all([
     applySessionOptimism(scope, path, body),
     applyTrackingOptimism(scope, path, body),

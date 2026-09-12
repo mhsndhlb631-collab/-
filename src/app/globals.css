@@ -3451,3 +3451,197 @@ textarea {
     transform: scale(1) translateY(0);
   }
 }
+
+/* Offline-first sync surface */
+.sync-status-wrap {
+  position: relative;
+}
+.sync-status-pill {
+  min-height: 38px;
+  padding: 0.48rem 0.72rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface, #fffefa);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+.sync-status-mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #368069;
+  box-shadow: 0 0 0 3px rgb(54 128 105 / 12%);
+}
+.sync-status-pill.is-waiting .sync-status-mark,
+.sync-status-pill.is-working .sync-status-mark {
+  background: #b27b2c;
+  box-shadow: 0 0 0 3px rgb(178 123 44 / 14%);
+}
+.sync-status-pill.is-attention .sync-status-mark {
+  background: #a95745;
+  box-shadow: 0 0 0 3px rgb(169 87 69 / 14%);
+}
+.sync-center {
+  position: absolute;
+  inset-block-start: calc(100% + 0.65rem);
+  inset-inline-end: 0;
+  z-index: 80;
+  width: min(390px, calc(100vw - 2rem));
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface, #fffefa);
+  box-shadow: 0 22px 60px rgb(19 38 32 / 16%);
+  color: var(--text);
+}
+.sync-center > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 1rem;
+  padding: 0.2rem 0.15rem 0.75rem;
+}
+.sync-center > header div,
+.sync-center-state div,
+.sync-issue div {
+  display: grid;
+  gap: 0.18rem;
+}
+.sync-center small {
+  color: var(--muted);
+  line-height: 1.55;
+}
+.sync-center-state {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.8rem;
+  border-radius: 13px;
+  background: rgb(54 128 105 / 8%);
+  color: #296b57;
+}
+.sync-center-state.is-waiting,
+.sync-center-state.is-working {
+  background: rgb(178 123 44 / 9%);
+  color: #8a5c1f;
+}
+.sync-center-state.is-attention {
+  background: rgb(169 87 69 / 9%);
+  color: #914636;
+}
+.sync-counts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.45rem;
+  margin-block: 0.7rem;
+}
+.sync-counts span {
+  min-width: 0;
+  padding: 0.58rem 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.sync-counts b {
+  display: block;
+  color: var(--text);
+  font-size: 1rem;
+}
+.sync-issue {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 0.7rem;
+  margin-block-start: 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.sync-issue strong {
+  font-size: 0.78rem;
+}
+.sync-issue button,
+.sync-center footer button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  padding: 0.45rem 0.65rem;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+.sync-issue button:disabled,
+.sync-center footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.sync-center footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  padding-block-start: 0.75rem;
+}
+.sync-center footer button.primary {
+  border-color: transparent;
+  background: var(--green);
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+[data-theme="dark"] .sync-status-pill,
+[data-theme="dark"] .sync-center {
+  background: #181d1b;
+}
+[data-theme="dark"] .sync-center-state.is-ready {
+  color: #79c4aa;
+}
+[data-theme="dark"] .sync-center-state.is-waiting,
+[data-theme="dark"] .sync-center-state.is-working {
+  color: #e1b66c;
+}
+[data-theme="dark"] .sync-center-state.is-attention {
+  color: #dc9888;
+}
+@media (max-width: 760px) {
+  .status-dot {
+    display: none;
+  }
+  .sync-status-pill {
+    min-height: 44px;
+    padding-inline: 0.62rem;
+  }
+  .sync-status-pill > span:last-child {
+    display: none;
+  }
+  .sync-center {
+    position: fixed;
+    inset: auto 0 0;
+    width: 100%;
+    max-height: min(78dvh, 660px);
+    overflow-y: auto;
+    border-radius: 22px 22px 0 0;
+    padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom));
+    box-shadow: 0 -18px 55px rgb(19 38 32 / 18%);
+  }
+  .sync-center footer {
+    position: sticky;
+    bottom: 0;
+    padding-block: 0.75rem 0;
+    background: inherit;
+  }
+  .sync-center footer button {
+    min-height: 44px;
+  }
+}

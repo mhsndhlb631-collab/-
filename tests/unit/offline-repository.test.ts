@@ -187,6 +187,54 @@ describe("OfflineRepository", () => {
     expect(await db.outbox.get(pending.id)).toBeDefined();
   });
 
+  it("discards only the selected conflict and preserves its audit row", async () => {
+    const db = database();
+    const repository = new OfflineRepository(db);
+    const item = await repository.enqueue({
+      id: "conflicted-write",
+      scopeId: "scope-1",
+      entityType: "attendance",
+      entityId: "roster-1",
+      operation: "UPDATE",
+      command: "SAVE",
+      method: "PUT",
+      path: "/save",
+      payload: { status: "PRESENT" },
+      baseVersion: 2,
+      dependencies: [],
+    });
+    await repository.fail(item, "conflict", {
+      code: "VERSION_CONFLICT",
+      message: "توجد نسخة أحدث",
+      httpStatus: 409,
+      requestId: "request-safe",
+    });
+    const [conflict] = await repository.unresolvedConflicts("scope-1");
+
+    await repository.discardConflict(conflict);
+
+    expect(await repository.unresolvedConflicts("scope-1")).toHaveLength(0);
+    expect(await repository.counts("scope-1")).toEqual({
+      pending: 0,
+      failed: 0,
+      conflicts: 0,
+    });
+    expect(await db.outbox.get(item.id)).toMatchObject({ status: "discarded" });
+    expect(await db.conflicts.get(conflict.id)).toMatchObject({
+      resolvedAt: expect.any(String),
+    });
+  });
+
+  it("stores sync metadata independently for each scope", async () => {
+    const repository = new OfflineRepository(database());
+    await repository.setMeta("last-sync:scope-1", "2026-09-12T10:00:00.000Z");
+
+    expect(await repository.metaValue("last-sync:scope-1")).toBe(
+      "2026-09-12T10:00:00.000Z",
+    );
+    expect(await repository.metaValue("last-sync:scope-2")).toBeNull();
+  });
+
   it("preserves pending writes during an additive IndexedDB upgrade", async () => {
     const name = `minhaj-upgrade-${randomUUID()}`;
     const legacy = new Dexie(name, { indexedDB, IDBKeyRange });
