@@ -62,8 +62,31 @@ try {
   const page = await fetch(base);
   assert.equal(page.status, 200);
   assert.match(await page.text(), /dir="rtl"/);
+  const serviceWorker = await fetch(`${base}/sw.js`);
+  assert.equal(serviceWorker.status, 200);
+  assert.match(
+    serviceWorker.headers.get("content-type") ?? "",
+    /application\/javascript/,
+  );
+  assert.match(serviceWorker.headers.get("cache-control") ?? "", /no-store/);
+  assert.equal(serviceWorker.headers.get("service-worker-allowed"), "/");
+  const serviceWorkerSource = await serviceWorker.text();
+  assert.match(serviceWorkerSource, /pathname\.startsWith\("\/api\/"\)/);
+  const offlinePage = await fetch(`${base}/offline.html`);
+  assert.equal(offlinePage.status, 200);
+  assert.match(await offlinePage.text(), /مِنهاج محفوظ على جهازك/);
+  const manifest = await fetch(`${base}/manifest.webmanifest`);
+  assert.equal(manifest.status, 200);
+  const manifestBody = await manifest.json();
+  assert.equal(manifestBody.display, "standalone");
+  assert.equal(manifestBody.scope, "/");
+  assert(
+    manifestBody.icons.some(
+      (icon) => icon.sizes === "512x512" && icon.purpose === "maskable",
+    ),
+  );
   console.log(
-    "PASS: production artifact, health, request ID, no-store, missing-DB readiness, RTL shell",
+    "PASS: production artifact, health, request ID, no-store, missing-DB readiness, RTL shell, offline PWA assets",
   );
 } finally {
   if (child.exitCode === null) {
