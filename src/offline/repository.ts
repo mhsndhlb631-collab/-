@@ -91,6 +91,25 @@ export class OfflineRepository {
     return (row as (OfflineSnapshot & { payload: T }) | undefined) ?? null;
   }
 
+  async mutateSnapshots(
+    targetScopeId: string,
+    matches: (resource: string) => boolean,
+    mutate: (payload: unknown) => unknown,
+  ) {
+    const rows = await this.db.snapshots
+      .where("scopeId")
+      .equals(targetScopeId)
+      .filter((item) => matches(item.resource))
+      .toArray();
+    await this.db.transaction("rw", this.db.snapshots, async () => {
+      for (const row of rows)
+        await this.db.snapshots.update(row.id, {
+          payload: mutate(row.payload),
+          fetchedAt: now(),
+        });
+    });
+  }
+
   async enqueue(input: QueuedMutation) {
     const timestamp = now();
     const mutationId = input.id ?? uuid();
@@ -111,7 +130,7 @@ export class OfflineRepository {
       path: input.path,
       payload: input.payload,
       idempotencyKey,
-      dependencies: input.dependencies,
+      dependencies: [...input.dependencies],
       status: "pending",
       attempts: 0,
       createdAt: timestamp,
@@ -127,6 +146,19 @@ export class OfflineRepository {
       this.db.records,
       this.db.outbox,
       async () => {
+        const previous = await this.db.outbox
+          .where("scopeId")
+          .equals(input.scopeId)
+          .filter(
+            (item) =>
+              item.entityType === input.entityType &&
+              item.entityId === input.entityId &&
+              item.status !== "synced",
+          )
+          .sortBy("createdAt");
+        const predecessor = previous.at(-1)?.id;
+        if (predecessor && !outbox.dependencies.includes(predecessor))
+          outbox.dependencies.push(predecessor);
         const current = await this.db.records.get(recordId);
         const record: OfflineRecord = {
           id: recordId,

@@ -11,6 +11,7 @@ import { DistributionWorkspace } from "./distribution-workspace";
 import { PremiumToday } from "./premium-today";
 import { QiwamIcon, type QiwamIconName } from "./qiwam-icon";
 import {
+  activeScopeId,
   deviceRepository,
   OfflineReadError,
   readJson,
@@ -18,6 +19,7 @@ import {
   saveAuthenticatedIdentity,
   setOfflineScope,
 } from "../offline/client";
+import { CommandError, writeJson } from "../offline/commands";
 
 type Overview = {
   actor_role: "RESPONSIBLE" | "MENTOR" | "STUDENT";
@@ -220,25 +222,26 @@ export function OperationsShell() {
     setBusy(true);
     setMessage("");
     try {
-      const response = await fetch(path, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          "Idempotency-Key": crypto.randomUUID(),
-        },
-        body: JSON.stringify(body),
-      });
-      const result = await response.json();
-      if (response.status === 401) {
+      const result = await writeJson(
+        path,
+        body,
+        method as "POST" | "PUT" | "PATCH" | "DELETE",
+      );
+      if (!result.queued_offline) await load();
+      setMessage(
+        result.queued_offline
+          ? "تم حفظ التغيير على الجهاز، وسيُزامن عند عودة الاتصال."
+          : "تم الحفظ بنجاح.",
+      );
+      return result;
+    } catch (error) {
+      if (error instanceof CommandError && error.status === 401) {
+        const scope = activeScopeId();
+        if (scope) await deviceRepository().revokeScope(scope);
+        setOfflineScope(null);
         setSignedIn(false);
         setMe(null);
       }
-      if (!response.ok)
-        throw new Error(result.message ?? "تعذر تنفيذ العملية.");
-      await load();
-      setMessage("تم الحفظ بنجاح.");
-      return result;
-    } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "تعذر تنفيذ العملية.",
       );

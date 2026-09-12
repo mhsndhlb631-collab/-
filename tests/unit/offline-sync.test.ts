@@ -139,6 +139,28 @@ describe("SyncManager", () => {
     });
   });
 
+  it("does not send a later edit to the same record before the first is acknowledged", async () => {
+    const { db, repository } = setup();
+    await repository.enqueue({ ...mutation, id: "first-edit" });
+    await repository.enqueue({ ...mutation, id: "second-edit" });
+    const transport = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      body: { code: "DEPENDENCY_UNAVAILABLE", message: "temporarily down" },
+      requestId: "request-1",
+    });
+    const manager = new SyncManager(repository, transport);
+
+    await manager.run("scope-1");
+
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(transport.mock.calls[0][0].id).toBe("first-edit");
+    expect(await db.outbox.get("second-edit")).toMatchObject({
+      status: "pending",
+      dependencies: ["first-edit"],
+    });
+  });
+
   it("uses bounded deterministic backoff", () => {
     const origin = Date.parse("2026-01-01T00:00:00.000Z");
     expect(retryAt(1, origin)).toBe("2026-01-01T00:00:01.000Z");
