@@ -35,6 +35,7 @@
     "acceptance:p8:load": "node --env-file=.env.local scripts/run-p8-load.ts",
     "acceptance:p8:recovery": "node --env-file=.env.local scripts/run-p8-recovery.ts",
     "acceptance:p8:environments": "node --env-file=.env.local scripts/run-p8-environment-check.ts",
+    "acceptance:offline-mobile": "node scripts/run-offline-mobile-acceptance.mjs",
     "monitor:production": "node scripts/run-p8-monitor.ts",
     "vercel:configure": "node scripts/configure-vercel.ts"
   },

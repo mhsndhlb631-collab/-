@@ -235,6 +235,38 @@ describe("OfflineRepository", () => {
     expect(await repository.metaValue("last-sync:scope-2")).toBeNull();
   });
 
+  it("retries an explicit failed item without changing its stable key", async () => {
+    const db = database();
+    const repository = new OfflineRepository(db);
+    const item = await repository.enqueue({
+      id: "retry-write",
+      idempotencyKey: "stable-retry-key",
+      scopeId: "scope-1",
+      entityType: "followup",
+      entityId: "followup-1",
+      operation: "CREATE",
+      command: "CREATE_FOLLOWUP",
+      method: "POST",
+      path: "/followups",
+      payload: {},
+      dependencies: [],
+    });
+    await repository.fail(item, "failed_validation", {
+      code: "INVALID_INPUT",
+      message: "راجع البيانات",
+      httpStatus: 400,
+      requestId: "request-safe",
+    });
+    const [failure] = await repository.failures("scope-1");
+
+    expect(await repository.retryFailure(failure)).toBe(true);
+    expect(await repository.outboxItem(item.id)).toMatchObject({
+      status: "pending",
+      idempotencyKey: "stable-retry-key",
+      error: null,
+    });
+  });
+
   it("preserves pending writes during an additive IndexedDB upgrade", async () => {
     const name = `minhaj-upgrade-${randomUUID()}`;
     const legacy = new Dexie(name, { indexedDB, IDBKeyRange });

@@ -103,6 +103,15 @@ export function SyncStatus() {
     window.location.reload();
   }
 
+  async function retryFailure(failure: OutboxItem) {
+    if (failure.status === "blocked_auth") {
+      window.location.reload();
+      return;
+    }
+    await deviceRepository().retryFailure(failure);
+    await sync();
+  }
+
   return (
     <div className="sync-status-wrap">
       <button
@@ -173,6 +182,15 @@ export function SyncStatus() {
                 <strong>{failureCopy(failure.status)}</strong>
                 <small>افتح الشاشة المرتبطة وراجع التغيير.</small>
               </div>
+              <button
+                type="button"
+                disabled={busy || kind === "offline"}
+                onClick={() => void retryFailure(failure)}
+              >
+                {failure.status === "blocked_auth"
+                  ? "تسجيل الدخول"
+                  : "إعادة المحاولة"}
+              </button>
             </article>
           ))}
           <footer>

@@ -21,6 +21,7 @@ import {
 } from "../offline/client";
 import { CommandError, writeJson } from "../offline/commands";
 import { startOfflineRuntime } from "../offline/runtime";
+import { warmOfflineDataset } from "../offline/preload";
 import { SyncStatus } from "./sync-status";
 import { mobileDestinations } from "./mobile-navigation";
 
@@ -172,7 +173,7 @@ export function OperationsShell() {
     setTheme(next);
     window.localStorage.setItem("qiwam-theme", next);
   }
-  async function load() {
+  async function load(warm = false) {
     const cachedIdentity = await restoreAuthenticatedIdentity<Me>();
     let identityResult;
     try {
@@ -209,13 +210,19 @@ export function OperationsShell() {
       ...overviewResult.data,
       sessions: sessionsResult.data.sessions,
     });
+    if (warm && identityResult.source === "server")
+      await warmOfflineDataset(
+        scope.id,
+        identity.role,
+        sessionsResult.data.sessions,
+      );
     setSignedIn(true);
     return true;
   }
   useEffect(() => {
     let cancelled = false;
     const initialize = window.setTimeout(() => {
-      void load()
+      void load(true)
         .catch(() => undefined)
         .finally(() => {
           if (!cancelled) setInitializing(false);
@@ -277,7 +284,7 @@ export function OperationsShell() {
         setPasswordOptional(false);
         setChangeRequired(true);
       } else {
-        await load();
+        await load(true);
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر تسجيل الدخول.");

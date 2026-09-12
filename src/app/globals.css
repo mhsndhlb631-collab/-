@@ -4009,6 +4009,67 @@ textarea {
   outline: 2px solid var(--gold, #b9822e);
   outline-offset: 2px;
 }
+@media (max-width: 800px) {
+  .login-page {
+    grid-template-rows: auto minmax(0, 1fr);
+    align-content: start;
+  }
+  .login-page .brand-panel {
+    min-height: 142px;
+    justify-content: flex-start;
+    padding: max(22px, env(safe-area-inset-top)) 20px 30px;
+  }
+  .login-page .brand-panel h1 {
+    margin: 4px 0;
+    font-size: clamp(1.7rem, 8vw, 2.15rem);
+    line-height: 1.25;
+  }
+  .login-page .brand-panel p {
+    margin: 0;
+    max-width: 32rem;
+    font-size: 0.82rem;
+    line-height: 1.6;
+  }
+  .login-page .login-card {
+    align-self: start;
+    width: calc(100% - 24px);
+    margin: -14px auto max(12px, env(safe-area-inset-bottom));
+    padding: 18px;
+    border-radius: 18px;
+  }
+  .login-page .login-card h2 {
+    font-size: 1.35rem;
+  }
+  .login-page .login-card .stack {
+    gap: 0.7rem;
+    margin-top: 0.9rem;
+  }
+  .login-page .login-card input {
+    min-height: 48px;
+  }
+  .login-page .login-card form > button {
+    min-height: 48px;
+  }
+  .login-page .password-toggle {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+@media (max-width: 800px) and (max-height: 620px) {
+  .login-page {
+    padding: 0;
+  }
+  .login-page .brand-panel {
+    min-height: 116px;
+    padding: max(14px, env(safe-area-inset-top)) 16px 24px;
+  }
+  .login-page .brand-panel p {
+    display: none;
+  }
+  .login-page .login-card {
+    padding-block: 15px;
+  }
+}
 .roster-save-bar {
   position: sticky;
   inset-block-end: 0.5rem;

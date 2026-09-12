@@ -383,6 +383,40 @@ export class OfflineRepository {
       .sortBy("updatedAt");
   }
 
+  async retryFailure(item: OutboxItem) {
+    if (
+      ![
+        "failed_validation",
+        "failed_permission",
+        "failed_missing_dependency",
+        "blocked_auth",
+      ].includes(item.status)
+    )
+      return false;
+    const timestamp = now();
+    await this.db.transaction(
+      "rw",
+      this.db.outbox,
+      this.db.records,
+      async () => {
+        await this.db.outbox.update(item.id, {
+          status: "pending",
+          nextAttemptAt: null,
+          error: null,
+          updatedAt: timestamp,
+        });
+        await this.db.records.update(
+          scopedRecordId(item.scopeId, item.entityType, item.entityId),
+          {
+            syncStatus: recordSyncStatus(item.operation),
+            updatedAt: timestamp,
+          },
+        );
+      },
+    );
+    return true;
+  }
+
   async unresolvedConflicts(targetScopeId: string) {
     return this.db.conflicts
       .where("scopeId")

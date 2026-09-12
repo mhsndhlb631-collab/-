@@ -1,5 +1,5 @@
 /* Minhaj application shell service worker. Domain API responses are never cached here. */
-const RELEASE = "minhaj-shell-v1";
+const RELEASE = "minhaj-shell-v2";
 const SHELL_CACHE = `${RELEASE}-shell`;
 const STATIC_CACHE = `${RELEASE}-static`;
 const SHELL_ASSETS = [
