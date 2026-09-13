@@ -1,5 +1,5 @@
 /* Minhaj application shell service worker. Domain API responses are never cached here. */
-const RELEASE = "minhaj-shell-v3";
+const RELEASE = "minhaj-shell-v4";
 const SHELL_CACHE = `${RELEASE}-shell`;
 const STATIC_CACHE = `${RELEASE}-static`;
 const SHELL_ASSETS = [
@@ -13,10 +13,7 @@ const SHELL_ASSETS = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(SHELL_CACHE)
-      .then((cache) => cache.addAll(SHELL_ASSETS))
-      .then(() => self.skipWaiting()),
+    caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS)),
   );
 });
 
@@ -95,6 +92,10 @@ self.addEventListener("fetch", (event) => {
 });
 
 self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    event.waitUntil(self.skipWaiting());
+    return;
+  }
   if (
     event.data?.type !== "WARM_STATIC_CACHE" ||
     !Array.isArray(event.data.urls)

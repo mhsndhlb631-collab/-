@@ -19,6 +19,7 @@ import type {
   OutboxItem,
 } from "../offline/types";
 import { QiwamIcon } from "./qiwam-icon";
+import { hasUnsavedChanges } from "./update-safety";
 
 const emptyCounts: SyncCounts = { pending: 0, failed: 0, conflicts: 0 };
 
@@ -43,6 +44,8 @@ export function SyncStatus() {
   const [conflicts, setConflicts] = useState<OfflineConflict[]>([]);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [updateReady, setUpdateReady] = useState(false);
+  const [updateBlocked, setUpdateBlocked] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
   const refresh = useCallback(async () => {
     const scope = activeScopeId();
@@ -63,20 +66,30 @@ export function SyncStatus() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => void refresh(), 0);
+    if ("serviceWorker" in navigator)
+      void navigator.serviceWorker.getRegistration().then((registration) => {
+        if (registration?.waiting) setUpdateReady(true);
+      });
     const unsubscribeConnectivity = connectivity.subscribe((state) =>
       setKind(state.kind),
     );
     const unsubscribeSync = subscribeToSync(() => void refresh());
     const onOutbox = () => void refresh();
     const onUpdate = () => setUpdateReady(true);
+    const onUpdateBlocked = () => {
+      setUpdating(false);
+      setUpdateBlocked(true);
+    };
     window.addEventListener("minhaj:outbox-changed", onOutbox);
     window.addEventListener("minhaj:update-ready", onUpdate);
+    window.addEventListener("minhaj:update-blocked", onUpdateBlocked);
     return () => {
       window.clearTimeout(timer);
       unsubscribeConnectivity();
       unsubscribeSync();
       window.removeEventListener("minhaj:outbox-changed", onOutbox);
       window.removeEventListener("minhaj:update-ready", onUpdate);
+      window.removeEventListener("minhaj:update-blocked", onUpdateBlocked);
     };
   }, [refresh]);
 
@@ -133,18 +146,28 @@ export function SyncStatus() {
     await sync();
   }
 
+  function applyUpdate() {
+    if (hasUnsavedChanges()) {
+      setUpdateBlocked(true);
+      return;
+    }
+    setUpdateBlocked(false);
+    setUpdating(true);
+    window.dispatchEvent(new CustomEvent("minhaj:apply-update"));
+  }
+
   return (
     <div className="sync-status-wrap">
       <button
         ref={triggerRef}
         type="button"
-        className={`sync-status-pill is-${tone}`}
+        className={`sync-status-pill is-${updateReady ? "update" : tone}`}
         aria-expanded={open}
         aria-controls="sync-center-dialog"
         onClick={() => setOpen((value) => !value)}
       >
         <span className="sync-status-mark" aria-hidden="true" />
-        <span>{copy.label}</span>
+        <span>{updateReady ? "تحديث متاح" : copy.label}</span>
       </button>
       {open &&
         createPortal(
@@ -199,6 +222,29 @@ export function SyncStatus() {
                   <b>{counts.conflicts}</b> مراجعة
                 </span>
               </div>
+              {updateReady && (
+                <div className="app-update-notice" role="status">
+                  <QiwamIcon name="download" size={20} weight="duotone" />
+                  <div>
+                    <strong>يتوفر إصدار جديد من منهاج</strong>
+                    <small>
+                      سيُطبّق فقط عند طلبك، ثم تُعاد الصفحة بعد جاهزيته.
+                    </small>
+                    {updateBlocked && (
+                      <small className="update-blocked-copy">
+                        احفظ تعديلات الحضور المفتوحة أولًا ثم حاول مجددًا.
+                      </small>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={updating}
+                    onClick={applyUpdate}
+                  >
+                    {updating ? "جارٍ التحديث…" : "تحديث الآن"}
+                  </button>
+                </div>
+              )}
               {conflicts.map((conflict) => (
                 <article className="sync-issue" key={conflict.id}>
                   <div>
@@ -234,14 +280,6 @@ export function SyncStatus() {
                 </article>
               ))}
               <footer>
-                {updateReady && (
-                  <button
-                    type="button"
-                    onClick={() => window.location.reload()}
-                  >
-                    تحديث التطبيق
-                  </button>
-                )}
                 <button
                   type="button"
                   className="primary"

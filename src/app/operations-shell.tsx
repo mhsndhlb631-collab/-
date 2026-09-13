@@ -24,6 +24,8 @@ import { startOfflineRuntime } from "../offline/runtime";
 import { warmOfflineDataset } from "../offline/preload";
 import { SyncStatus } from "./sync-status";
 import { mobileDestinations } from "./mobile-navigation";
+import { InstallAppCard } from "./install-app-card";
+import { setEditorDirty } from "./update-safety";
 
 type Overview = {
   actor_role: "RESPONSIBLE" | "MENTOR" | "STUDENT";
@@ -183,7 +185,7 @@ export function OperationsShell() {
     } catch (error) {
       if (error instanceof OfflineReadError && error.code === "UNAUTHORIZED") {
         if (cachedIdentity)
-          await deviceRepository().revokeScope(cachedIdentity.scope.id);
+          await deviceRepository().purgeScope(cachedIdentity.scope.id);
         setOfflineScope(null);
         setSignedIn(false);
         setMe(null);
@@ -252,7 +254,7 @@ export function OperationsShell() {
     } catch (error) {
       if (error instanceof CommandError && error.status === 401) {
         const scope = activeScopeId();
-        if (scope) await deviceRepository().revokeScope(scope);
+        if (scope) await deviceRepository().purgeScope(scope);
         setOfflineScope(null);
         setSignedIn(false);
         setMe(null);
@@ -313,6 +315,9 @@ export function OperationsShell() {
       const result = await response.json();
       if (!response.ok)
         throw new Error(result.message ?? "تعذر تغيير كلمة المرور.");
+      const scope = activeScopeId();
+      if (scope) await deviceRepository().purgeScope(scope);
+      setOfflineScope(null);
       setChangeRequired(false);
       setPasswordOptional(false);
       setSignedIn(false);
@@ -328,15 +333,30 @@ export function OperationsShell() {
   }
   async function logout() {
     setBusy(true);
+    setMessage("");
     try {
-      await fetch("/api/v1/auth/logout", { method: "POST" });
-    } finally {
+      const scope = activeScopeId();
+      if (scope) {
+        const counts = await deviceRepository().counts(scope);
+        if (counts.pending || counts.failed || counts.conflicts)
+          throw new Error(
+            "توجد تغييرات محلية تحتاج مزامنة أو مراجعة قبل تسجيل الخروج.",
+          );
+      }
+      const response = await fetch("/api/v1/auth/logout", { method: "POST" });
+      if (!response.ok) throw new Error("تعذر تسجيل الخروج الآن.");
+      if (scope) await deviceRepository().purgeScope(scope);
       setOfflineScope(null);
       setSignedIn(false);
       setMe(null);
       setActiveView("today");
-      setBusy(false);
       setMessage("تم تسجيل الخروج.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "تعذر تسجيل الخروج الآن.",
+      );
+    } finally {
+      setBusy(false);
     }
   }
   if (initializing)
@@ -862,6 +882,15 @@ export function OperationsShell() {
           </div>
         )}
         <div id="workspace-content" className="workspace-content" tabIndex={-1}>
+          <InstallAppCard
+            placement={
+              activeView === "account"
+                ? "settings"
+                : activeView === "today"
+                  ? "home"
+                  : "hidden"
+            }
+          />
           {activeView === "today" && (
             <PremiumToday
               data={data}
@@ -1409,6 +1438,10 @@ function SessionWorkspace({
     [dirty, setDirty] = useState(false),
     [recordedCount, setRecordedCount] = useState(0),
     [markAllVersion, setMarkAllVersion] = useState(0);
+  useEffect(() => {
+    setEditorDirty("session-roster", dirty);
+    return () => setEditorDirty("session-roster", false);
+  }, [dirty]);
   async function openDetail(id: string) {
     try {
       const result = await readJson<SessionDetail>(`/api/v1/sessions/${id}`);

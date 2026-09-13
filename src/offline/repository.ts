@@ -67,6 +67,35 @@ export class OfflineRepository {
     });
   }
 
+  async purgeScope(targetScopeId: string) {
+    const metaKeys = await this.db.meta
+      .filter((item) => item.key.endsWith(`:${targetScopeId}`))
+      .primaryKeys();
+    await this.db.transaction(
+      "rw",
+      [
+        this.db.scopes,
+        this.db.snapshots,
+        this.db.records,
+        this.db.outbox,
+        this.db.idMap,
+        this.db.meta,
+        this.db.conflicts,
+      ],
+      async () => {
+        await Promise.all([
+          this.db.scopes.delete(targetScopeId),
+          this.db.snapshots.where("scopeId").equals(targetScopeId).delete(),
+          this.db.records.where("scopeId").equals(targetScopeId).delete(),
+          this.db.outbox.where("scopeId").equals(targetScopeId).delete(),
+          this.db.idMap.where("scopeId").equals(targetScopeId).delete(),
+          this.db.conflicts.where("scopeId").equals(targetScopeId).delete(),
+          this.db.meta.bulkDelete(metaKeys),
+        ]);
+      },
+    );
+  }
+
   async cacheSnapshot(
     targetScopeId: string,
     resource: string,

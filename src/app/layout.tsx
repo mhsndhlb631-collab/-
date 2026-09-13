@@ -6,6 +6,16 @@ import { ServiceWorkerRegistration } from "./service-worker-registration";
 export const metadata: Metadata = {
   title: "مِنهاج | نظام التشغيل التربوي",
   description: "مِنهاج لإدارة البرامج والمجموعات والرحلة التربوية.",
+  applicationName: "منهاج",
+  appleWebApp: {
+    capable: true,
+    title: "منهاج",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  formatDetection: { telephone: false },
 };
 export const viewport: Viewport = {
   width: "device-width",

@@ -15,6 +15,7 @@ import {
   ClipboardTextIcon,
   ClockIcon,
   CurrencyCircleDollarIcon,
+  DownloadSimpleIcon,
   FoldersIcon,
   GearIcon,
   HouseIcon,
@@ -25,6 +26,7 @@ import {
   NotebookIcon,
   PlusIcon,
   SparkleIcon,
+  ShareNetworkIcon,
   StudentIcon,
   SunIcon,
   TargetIcon,
@@ -73,7 +75,9 @@ export type QiwamIconName =
   | "calendar-check"
   | "student"
   | "notebook"
-  | "sparkle";
+  | "sparkle"
+  | "download"
+  | "share";
 
 const icons: Record<QiwamIconName, Icon> = {
   home: HouseIcon,
@@ -111,6 +115,8 @@ const icons: Record<QiwamIconName, Icon> = {
   student: StudentIcon,
   notebook: NotebookIcon,
   sparkle: SparkleIcon,
+  download: DownloadSimpleIcon,
+  share: ShareNetworkIcon,
 };
 
 export function QiwamIcon({

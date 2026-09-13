@@ -235,6 +235,89 @@ describe("OfflineRepository", () => {
     expect(await repository.metaValue("last-sync:scope-2")).toBeNull();
   });
 
+  it("purges every local row for the signed-out scope only", async () => {
+    const db = database();
+    const repository = new OfflineRepository(db);
+    await repository.saveScope({
+      id: "scope-1",
+      accountId: "account-1",
+      workspaceId: "workspace-1",
+      displayName: "مستخدم",
+      workspaceName: "مساحة",
+      role: "MENTOR",
+      accessState: "active",
+      lastAuthenticatedAt: "2026-09-12T10:00:00.000Z",
+      lastValidatedAt: "2026-09-12T10:00:00.000Z",
+    });
+    await repository.saveScope({
+      id: "scope-2",
+      accountId: "account-2",
+      workspaceId: "workspace-2",
+      displayName: "مستخدم آخر",
+      workspaceName: "مساحة أخرى",
+      role: "STUDENT",
+      accessState: "active",
+      lastAuthenticatedAt: "2026-09-12T10:00:00.000Z",
+      lastValidatedAt: "2026-09-12T10:00:00.000Z",
+    });
+    await repository.cacheSnapshot("scope-1", "/api/v1/programs", {
+      private: true,
+    });
+    await repository.cacheSnapshot("scope-2", "/api/v1/programs", {
+      keep: true,
+    });
+    await repository.enqueue({
+      id: "scope-1-write",
+      scopeId: "scope-1",
+      entityType: "attendance",
+      entityId: "row-1",
+      operation: "UPDATE",
+      command: "SAVE",
+      method: "PUT",
+      path: "/save",
+      payload: {},
+      dependencies: [],
+    });
+    await repository.setMeta("last-sync:scope-1", "private");
+    await repository.setMeta("last-sync:scope-2", "keep");
+    await db.idMap.put({
+      id: "scope-1:local-1",
+      scopeId: "scope-1",
+      localId: "local-1",
+      serverId: "server-1",
+      entityType: "attendance",
+      createdAt: "2026-09-12T10:00:00.000Z",
+    });
+    await db.conflicts.put({
+      id: "scope-1-conflict",
+      scopeId: "scope-1",
+      outboxId: "scope-1-write",
+      entityType: "attendance",
+      entityId: "row-1",
+      baseVersion: 1,
+      localValue: { status: "PRESENT" },
+      serverValue: { status: "ABSENT" },
+      createdAt: "2026-09-12T10:00:00.000Z",
+      resolvedAt: null,
+    });
+
+    await repository.purgeScope("scope-1");
+
+    expect(await db.scopes.get("scope-1")).toBeUndefined();
+    expect(await db.snapshots.where("scopeId").equals("scope-1").count()).toBe(
+      0,
+    );
+    expect(await db.records.where("scopeId").equals("scope-1").count()).toBe(0);
+    expect(await db.outbox.where("scopeId").equals("scope-1").count()).toBe(0);
+    expect(await db.idMap.where("scopeId").equals("scope-1").count()).toBe(0);
+    expect(await db.conflicts.where("scopeId").equals("scope-1").count()).toBe(
+      0,
+    );
+    expect(await repository.metaValue("last-sync:scope-1")).toBeNull();
+    expect(await db.scopes.get("scope-2")).toBeDefined();
+    expect(await repository.metaValue("last-sync:scope-2")).toBe("keep");
+  });
+
   it("retries an explicit failed item without changing its stable key", async () => {
     const db = database();
     const repository = new OfflineRepository(db);

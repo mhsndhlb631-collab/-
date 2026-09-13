@@ -14,6 +14,9 @@ const [
   preload,
   syncStatus,
   today,
+  installCard,
+  serviceWorkerRegistration,
+  installPromptStore,
 ] = await Promise.all([
   read("public/sw.js"),
   read("src/app/manifest.ts"),
@@ -24,6 +27,9 @@ const [
   read("src/offline/preload.ts"),
   read("src/app/sync-status.tsx"),
   read("src/app/premium-today.tsx"),
+  read("src/app/install-app-card.tsx"),
+  read("src/app/service-worker-registration.tsx"),
+  read("src/app/install-prompt-store.ts"),
 ]);
 
 const checks = [];
@@ -47,11 +53,44 @@ check(
 check("pwa_standalone", manifest.includes('display: "standalone"'));
 check("pwa_maskable_icon", manifest.includes('purpose: "maskable"'));
 check(
+  "pwa_arabic_rtl",
+  manifest.includes('lang: "ar"') && manifest.includes('dir: "rtl"'),
+);
+check(
+  "pwa_install_prompt_captured",
+  serviceWorkerRegistration.includes('"beforeinstallprompt"') &&
+    installPromptStore.includes("event.preventDefault()") &&
+    installCard.includes("currentInstallPrompt()"),
+);
+check(
+  "pwa_standalone_detection",
+  installCard.includes('matchMedia("(display-mode: standalone)")'),
+);
+check(
+  "pwa_ios_install_help",
+  installCard.includes("إضافة إلى الشاشة الرئيسية"),
+);
+check(
+  "pwa_update_requires_user_action",
+  serviceWorker.includes('event.data?.type === "SKIP_WAITING"') &&
+    !/install[\s\S]{0,240}skipWaiting/.test(serviceWorker),
+);
+check(
+  "pwa_safe_update_reload",
+  serviceWorkerRegistration.includes("hasUnsavedChanges()") &&
+    serviceWorkerRegistration.includes('"controllerchange"'),
+);
+check(
   "stable_idempotency_header",
   commands.includes('"Idempotency-Key": idempotencyKey'),
 );
 check("durable_outbox", repository.includes("this.db.outbox"));
 check("safe_synced_cleanup", repository.includes('item.status === "synced"'));
+check(
+  "logout_scope_purge",
+  repository.includes("async purgeScope") &&
+    shell.includes("purgeScope(scope)"),
+);
 check("role_scoped_preload", preload.includes('role === "RESPONSIBLE"'));
 check("bounded_session_preload", preload.includes(".slice(0, 12)"));
 check("rtl_document", shell.includes("التنقل الرئيسي للهاتف"));

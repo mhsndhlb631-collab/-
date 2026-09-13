@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "مِنهاج | نظام التشغيل التربوي",
-    short_name: "مِنهاج",
-    description: "إدارة البرامج والمجموعات والرحلة التربوية.",
+    name: "منهاج",
+    short_name: "منهاج",
+    description: "منصة منهاج لإدارة البرامج والمجموعات والرحلة التربوية.",
     id: "/",
     start_url: "/",
     scope: "/",
@@ -14,6 +14,8 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#0f4f46",
     lang: "ar",
     dir: "rtl",
+    categories: ["education", "productivity"],
+    prefer_related_applications: false,
     icons: [
       {
         src: "/icons/icon-192.png",

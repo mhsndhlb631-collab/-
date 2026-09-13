@@ -3487,6 +3487,10 @@ textarea {
   background: #a95745;
   box-shadow: 0 0 0 3px rgb(169 87 69 / 14%);
 }
+.sync-status-pill.is-update .sync-status-mark {
+  background: #bd7b21;
+  box-shadow: 0 0 0 3px rgb(189 123 33 / 16%);
+}
 .sync-center {
   position: absolute;
   inset-block-start: calc(100% + 0.65rem);
@@ -3586,6 +3590,45 @@ textarea {
   cursor: not-allowed;
   opacity: 0.55;
 }
+.app-update-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  margin-block: 0.7rem;
+  padding: 0.75rem;
+  border: 1px solid rgb(189 123 33 / 28%);
+  border-radius: 13px;
+  background: rgb(189 123 33 / 8%);
+  color: #835315;
+}
+.app-update-notice > div {
+  display: grid;
+  gap: 0.15rem;
+}
+.app-update-notice small {
+  color: var(--muted);
+}
+.app-update-notice .update-blocked-copy {
+  color: #a95745;
+  font-weight: 700;
+}
+.app-update-notice button {
+  min-height: 38px;
+  padding: 0.45rem 0.7rem;
+  border: 0;
+  border-radius: 10px;
+  background: #9a641d;
+  color: white;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.app-update-notice button:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
 .sync-center footer {
   display: flex;
   justify-content: flex-end;
@@ -3613,6 +3656,9 @@ textarea {
 }
 [data-theme="dark"] .sync-center-state.is-attention {
   color: #dc9888;
+}
+[data-theme="dark"] .app-update-notice {
+  color: #e1b66c;
 }
 @media (max-width: 760px) {
   .status-dot {
@@ -3642,6 +3688,121 @@ textarea {
     background: inherit;
   }
   .sync-center footer button {
+    min-height: 44px;
+  }
+  .app-update-notice {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .app-update-notice button {
+    grid-column: 1 / -1;
+    min-height: 44px;
+  }
+}
+
+/* Optional PWA installation surface */
+.install-app-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  max-width: 920px;
+  margin: 0 auto 16px;
+  padding: 14px 16px;
+  border: 1px solid rgb(15 79 70 / 18%);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 90% 20%, rgb(43 161 138 / 10%), transparent 38%),
+    var(--surface, #fffefa);
+  box-shadow: 0 10px 28px rgb(19 38 32 / 7%);
+}
+.install-app-card.is-settings {
+  max-width: none;
+  margin-inline: 0;
+}
+.install-app-logo {
+  width: 58px;
+  height: 58px;
+  border-radius: 15px;
+  object-fit: cover;
+  box-shadow: 0 6px 16px rgb(15 79 70 / 12%);
+}
+.install-app-copy {
+  display: grid;
+  gap: 0.2rem;
+}
+.install-app-copy > strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+.install-app-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.7;
+}
+.install-app-action,
+.install-app-ios-actions button {
+  min-height: 42px;
+  padding: 0.55rem 0.85rem;
+  border: 0;
+  border-radius: 11px;
+  background: var(--green);
+  color: white;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.install-app-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+.install-app-action:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+.install-app-ios-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--green);
+}
+.install-app-ios-actions button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+}
+[data-theme="dark"] .install-app-card {
+  border-color: rgb(76 201 174 / 18%);
+  background:
+    radial-gradient(circle at 90% 20%, rgb(43 161 138 / 12%), transparent 38%),
+    #181d1b;
+  box-shadow: 0 12px 34px rgb(0 0 0 / 18%);
+}
+@media (max-width: 640px) {
+  .install-app-card {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 12px;
+    border-radius: 16px;
+  }
+  .install-app-logo {
+    width: 50px;
+    height: 50px;
+    border-radius: 13px;
+  }
+  .install-app-action,
+  .install-app-ios-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .install-app-ios-actions {
+    justify-content: flex-end;
+  }
+  .install-app-action,
+  .install-app-ios-actions button {
     min-height: 44px;
   }
 }
