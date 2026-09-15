@@ -39,6 +39,27 @@ type Data = {
     title: string;
     cohort_name: string;
   }>;
+  mentor_assignments: Array<{
+    id: string;
+    title: string;
+    instructions: string;
+    category: string;
+    measurement_mode: string;
+    max_score: number;
+    pass_score: number | null;
+    mandatory: boolean;
+    requires_note: boolean;
+    requires_evidence: boolean;
+    group_name: string;
+    occurrence_id: string;
+    due_at: string;
+    occurrence_status: string;
+    value: unknown;
+    normalized_score: number | null;
+    evaluation_status: string | null;
+    updated_at: string | null;
+    notes: Array<{ body: string; created_at: string }>;
+  }>;
 };
 export function LearningWorkspace({
   busy,
@@ -127,6 +148,43 @@ export function LearningWorkspace({
             </label>
           )}
           <div className="learning-grid">
+            {actorRole === "STUDENT" && (
+              <article className="span-two">
+                <h3>تكليفات المربي</h3>
+                {!data.mentor_assignments.length && (
+                  <p className="empty-inline">
+                    لا توجد تكليفات مباشرة من المربي الآن.
+                  </p>
+                )}
+                {data.mentor_assignments.map((item) => (
+                  <div
+                    className="learning-item"
+                    key={`${item.id}-${item.occurrence_id}`}
+                  >
+                    <strong>{item.title}</strong>
+                    <p>{item.instructions}</p>
+                    <span>
+                      {item.category} · {item.group_name} · مستحق في{" "}
+                      {new Date(item.due_at).toLocaleString("ar-EG")}
+                    </span>
+                    <span>
+                      {item.evaluation_status
+                        ? `الحالة: ${item.evaluation_status}`
+                        : "لم يُسجل التقييم بعد"}
+                      {item.normalized_score === null
+                        ? ""
+                        : ` · ${Math.round(Number(item.normalized_score) * 100)}%`}
+                    </span>
+                    {item.notes.map((note) => (
+                      <small key={note.created_at}>
+                        {note.body} ·{" "}
+                        {new Date(note.created_at).toLocaleDateString("ar-EG")}
+                      </small>
+                    ))}
+                  </div>
+                ))}
+              </article>
+            )}
             <article>
               <h3>المحتوى</h3>
               {!data.content.length && (

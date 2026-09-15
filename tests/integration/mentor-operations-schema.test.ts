@@ -59,4 +59,21 @@ describe("mentor operations schema", () => {
       result.rows.every((row) => row.relrowsecurity && row.relforcerowsecurity),
     ).toBe(true);
   });
+
+  it("lets students read only their own assignment targets through RLS", async () => {
+    const result = await db.query<{ policyname: string }>(
+      "select policyname from pg_policies where schemaname='app' and tablename='assignment_targets' and policyname='assignment_targets_student_read'",
+    );
+    expect(result.rows).toEqual([
+      { policyname: "assignment_targets_student_read" },
+    ]);
+  });
+
+  it("keeps staff-only evaluation notes hidden from students", async () => {
+    const result = await db.query<{ qual: string }>(
+      "select qual from pg_policies where schemaname='app' and tablename='assignment_evaluation_notes' and policyname='assignment_evaluation_notes_read'",
+    );
+    expect(result.rows[0]?.qual).toContain("visibility");
+    expect(result.rows[0]?.qual).toContain("STUDENT");
+  });
 });

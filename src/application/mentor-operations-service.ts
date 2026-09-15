@@ -92,6 +92,14 @@ const evaluationInput = z
     reason: z.string().trim().min(3).max(500).nullable().default(null),
   })
   .strict();
+const intelligenceFilter = z
+  .object({
+    group_id: uuid.optional(),
+    category: z.string().trim().min(1).max(80).optional(),
+    from: z.iso.date().optional(),
+    to: z.iso.date().optional(),
+  })
+  .strict();
 
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
@@ -387,8 +395,11 @@ export class MentorOperationsService {
     });
   }
 
-  async intelligence() {
+  async intelligence(value: unknown = {}) {
     staff(this.actor);
+    const filter = parse(intelligenceFilter, value);
+    if (filter.from && filter.to && filter.from > filter.to)
+      throw new AppError("VALIDATION_ERROR");
     const rows = await this.tx<
       Array<{
         enrollment_id: string;
@@ -408,17 +419,24 @@ export class MentorOperationsService {
         count(v.id)::int evaluated_count,count(*) filter(where o.due_at<clock_timestamp() and v.id is null)::int missing_count,
         round(coalesce(sum(v.normalized_score*d.weight)/nullif(sum(d.weight) filter(where v.id is not null),0)*100,0),1) average_score,
         coalesce(json_agg(json_build_object('category',d.category,'score',round(v.normalized_score*100,1),'assignment',d.title,'due_at',o.due_at)) filter(where v.id is not null),'[]') evidence,
-        (select coalesce(json_agg(json_build_object('body',n.body,'visibility',n.visibility,'created_at',n.created_at,'assignment',nd.title) order by n.created_at desc),'[]')
+        (select coalesce(json_agg(json_build_object('body',n.body,'visibility',n.visibility,'created_at',n.created_at,'assignment',nd.title,'author_name',np.display_name) order by n.created_at desc),'[]')
           from app.assignment_evaluation_notes n join app.assignment_evaluations nv on nv.id=n.evaluation_id
           join app.assignment_occurrences no on no.id=nv.occurrence_id join app.assignment_definitions nd on nd.id=no.assignment_definition_id
+          join app.login_accounts na on na.id=n.author_account_id join app.persons np on np.id=na.person_id
           where nv.enrollment_id=e.id) notes,
         (select round(100.0*count(*) filter(where a.status in ('PRESENT','LATE'))/nullif(count(*) filter(where a.status<>'NOT_RECORDED'),0),1)
           from app.session_roster sr join app.attendance a on a.roster_id=sr.id where sr.enrollment_id=e.id) attendance_rate
       from app.enrollments e join app.student_profiles sp on sp.id=e.student_profile_id join app.persons p on p.id=sp.person_id
       join app.group_memberships gm on gm.enrollment_id=e.id and gm.effective_to is null join app.groups g on g.id=gm.group_id
-      left join app.assignment_targets t on t.enrollment_id=e.id left join app.assignment_definitions d on d.id=t.assignment_definition_id and d.status='ACTIVE'
-      left join app.assignment_occurrences o on o.assignment_definition_id=d.id left join app.assignment_evaluations v on v.occurrence_id=o.id and v.enrollment_id=e.id
+      left join app.assignment_targets t on t.enrollment_id=e.id
+      left join app.assignment_definitions d on d.id=t.assignment_definition_id and d.status='ACTIVE'
+        and (${filter.category ?? null}::text is null or d.category=${filter.category ?? null})
+      left join app.assignment_occurrences o on o.assignment_definition_id=d.id
+        and (${filter.from ?? null}::date is null or o.due_at::date>=${filter.from ?? null}::date)
+        and (${filter.to ?? null}::date is null or o.due_at::date<=${filter.to ?? null}::date)
+      left join app.assignment_evaluations v on v.occurrence_id=o.id and v.enrollment_id=e.id
       where e.workspace_id=${this.actor.workspaceId}::uuid and e.effective_to is null and app.actor_can_read_person(p.workspace_id,p.id)
+        and (${filter.group_id ?? null}::uuid is null or g.id=${filter.group_id ?? null}::uuid)
       group by e.id,sp.id,p.id,g.id order by p.display_name`;
     const students = rows.map((row) => {
       const count = number(row.evaluated_count),

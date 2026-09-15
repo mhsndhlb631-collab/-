@@ -98,6 +98,14 @@ export class P5FollowupService {
           from visible v join app.enrollments e on e.id=v.id join app.cohorts c on c.id=e.cohort_id join app.plan_weeks pw on pw.plan_id=c.current_plan_id
           join app.assignment_definitions ad on ad.plan_week_id=pw.id left join app.assignment_submissions s on s.enrollment_id=e.id and s.assignment_definition_id=ad.id and s.status='REVIEWED'
           where s.id is null and (c.starts_on+((pw.week_number-1)*7+ad.due_day_offset))::timestamptz<${asOf}::timestamptz
+        ), operational_assignment_due as (
+          select t.enrollment_id,d.id assignment_id,o.id occurrence_id,o.due_at
+          from app.assignment_occurrences o
+          join app.assignment_definitions d on d.id=o.assignment_definition_id and d.group_id is not null and d.status='ACTIVE'
+          join app.assignment_targets t on t.assignment_definition_id=d.id
+          join visible v on v.id=t.enrollment_id
+          left join app.assignment_evaluations ev on ev.occurrence_id=o.id and ev.enrollment_id=t.enrollment_id
+          where ev.id is null and o.status='OPEN' and o.due_at<${asOf}::timestamptz
         )
         select enrollment_id,'CONSECUTIVE_UNEXCUSED_ABSENCE' rule_code,evidence_key,due_at,jsonb_build_object('session_ids',string_to_array(evidence_key,':')) evidence from two_absent
         union all select v.id,'NO_QUALIFIED_FOLLOWUP_14D','followup:'||v.id,coalesce(l.at,v.effective_from)+interval '14 days',jsonb_build_object('last_qualified_at',l.at) from visible v left join last_followup l on l.enrollment_id=v.id where coalesce(l.at,v.effective_from)+interval '14 days'<${asOf}::timestamptz
@@ -105,6 +113,7 @@ export class P5FollowupService {
         union all select sr.enrollment_id,'SESSION_OVERDUE_24H','session:'||so.id,so.ends_at+interval '24 hours',jsonb_build_object('session_id',so.id) from app.session_roster sr join visible v on v.id=sr.enrollment_id join app.session_occurrences so on so.id=sr.session_occurrence_id where so.status not in ('CLOSED','CANCELLED') and so.ends_at+interval '24 hours'<${asOf}::timestamptz
         union all select enrollment_id,'EXAM_OR_REVIEW_OVERDUE','exam:'||exam_id,due_at,jsonb_build_object('exam_id',exam_id) from exam_due
         union all select enrollment_id,'EXAM_OR_REVIEW_OVERDUE','assignment:'||assignment_id,due_at,jsonb_build_object('assignment_id',assignment_id) from assignment_due
+        union all select enrollment_id,'EXAM_OR_REVIEW_OVERDUE','operational-assignment:'||assignment_id||':'||occurrence_id,due_at,jsonb_build_object('assignment_id',assignment_id,'occurrence_id',occurrence_id,'source','MENTOR_OPERATIONS') from operational_assignment_due
         union all select c.enrollment_id,'CASE_ACTION_OVERDUE','case:'||c.id,coalesce(min(a.due_at),c.opened_at),jsonb_build_object('case_id',c.id) from app.cases c join visible v on v.id=c.enrollment_id left join app.actions a on a.case_id=c.id and a.status not in ('VERIFIED','CANCELLED') where c.status in ('OPEN','MONITORING') group by c.id,c.enrollment_id,c.opened_at having count(a.id)=0 or min(a.due_at)<${asOf}::timestamptz`;
         let created = 0;
         for (const item of candidates) {
@@ -112,7 +121,7 @@ export class P5FollowupService {
           const owners = await this.tx<{ id: string }[]>`
             select a.id from app.group_memberships gm
             join app.mentor_assignments ma on ma.group_id=gm.group_id and ma.workspace_id=gm.workspace_id
-            join app.login_accounts a on a.person_id=ma.mentor_person_id and a.workspace_id=ma.workspace_id and a.role='MENTOR' and a.status='ACTIVE'
+            join app.login_accounts a on a.person_id=ma.mentor_person_id and a.workspace_id=ma.workspace_id and a.role in ('MENTOR','RESPONSIBLE') and a.status='ACTIVE'
             where gm.enrollment_id=${item.enrollment_id}::uuid
               and gm.effective_from<=${item.due_at} and (gm.effective_to is null or gm.effective_to>${item.due_at})
               and ma.effective_from<=${item.due_at} and (ma.effective_to is null or ma.effective_to>${item.due_at})
@@ -251,8 +260,11 @@ export class P5FollowupService {
         return Boolean(rows[0]);
       }
       if (e.assignment_id) {
-        const rows = await this
-          .tx`select 1 from app.assignment_definitions ad join app.plan_weeks pw on pw.id=ad.plan_week_id join app.cohorts c on c.current_plan_id=pw.plan_id join app.enrollments en on en.cohort_id=c.id where en.id=${item.enrollment_id}::uuid and ad.id=${e.assignment_id}::uuid and (c.starts_on+((pw.week_number-1)*7+ad.due_day_offset))::timestamptz<clock_timestamp() and not exists(select 1 from app.assignment_submissions s where s.enrollment_id=en.id and s.assignment_definition_id=ad.id and s.status='REVIEWED')`;
+        const rows = e.occurrence_id
+          ? await this
+              .tx`select 1 from app.assignment_occurrences o join app.assignment_targets t on t.assignment_definition_id=o.assignment_definition_id where o.id=${e.occurrence_id}::uuid and o.assignment_definition_id=${e.assignment_id}::uuid and t.enrollment_id=${item.enrollment_id}::uuid and o.status='OPEN' and o.due_at<clock_timestamp() and not exists(select 1 from app.assignment_evaluations ev where ev.occurrence_id=o.id and ev.enrollment_id=t.enrollment_id)`
+          : await this
+              .tx`select 1 from app.assignment_definitions ad join app.plan_weeks pw on pw.id=ad.plan_week_id join app.cohorts c on c.current_plan_id=pw.plan_id join app.enrollments en on en.cohort_id=c.id where en.id=${item.enrollment_id}::uuid and ad.id=${e.assignment_id}::uuid and (c.starts_on+((pw.week_number-1)*7+ad.due_day_offset))::timestamptz<clock_timestamp() and not exists(select 1 from app.assignment_submissions s where s.enrollment_id=en.id and s.assignment_definition_id=ad.id and s.status='REVIEWED')`;
         return Boolean(rows[0]);
       }
     }

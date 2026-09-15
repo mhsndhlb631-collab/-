@@ -14,7 +14,11 @@ export function mentorOperationsQuery(request: Request) {
     return withAuthenticatedTransaction(request, async (tx, actor) => {
       const service = new MentorOperationsService(tx, actor, requestId);
       return url.searchParams.get("view") === "intelligence"
-        ? service.intelligence()
+        ? service.intelligence(
+            Object.fromEntries(
+              [...url.searchParams].filter(([name]) => name !== "view"),
+            ),
+          )
         : service.overview();
     });
   });

@@ -61,6 +61,7 @@ type Intelligence = {
         visibility: string;
         created_at: string;
         assignment: string;
+        author_name: string;
       }>;
       attendance_rate: number | null;
     }
@@ -121,6 +122,13 @@ export function MentorOperationsWorkspace({
   >("assignments");
   const [assignmentId, setAssignmentId] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
+  const [studentSearch, setStudentSearch] = useState("");
+  const [leaderboardFilter, setLeaderboardFilter] = useState({
+    group_id: "",
+    category: "",
+    from: "",
+    to: "",
+  });
   async function load() {
     const [o, i] = await Promise.all([
       readJson<Overview>("/api/v1/mentor-operations"),
@@ -128,6 +136,15 @@ export function MentorOperationsWorkspace({
     ]);
     setOverview(o.data);
     setIntel(i.data);
+  }
+  async function loadFilteredIntelligence() {
+    const query = new URLSearchParams({ view: "intelligence" });
+    for (const [name, value] of Object.entries(leaderboardFilter))
+      if (value) query.set(name, value);
+    const result = await readJson<Intelligence>(
+      `/api/v1/mentor-operations?${query.toString()}`,
+    );
+    setIntel(result.data);
   }
   useEffect(() => {
     void Promise.all([
@@ -634,28 +651,45 @@ export function MentorOperationsWorkspace({
         </article>
       )}
       {tab === "students" && (
-        <div className="student-card-grid">
-          {intel?.students.map((s) => (
-            <button
-              className="student-insight-card"
-              key={s.student_id}
-              onClick={() => setSelectedStudent(s.student_id)}
-            >
-              <span
-                className={`classification ${s.classification.toLowerCase()}`}
-              >
-                {labels[s.classification]}
-              </span>
-              <strong>{s.display_name}</strong>
-              <small>{s.group_name}</small>
-              <b>{s.evaluated_count < 2 ? "—" : `${s.average_score}%`}</b>
-              <span>
-                {s.missing_count} تقييم ناقص · {s.weaknesses.length} نقطة ضعف
-                متكررة
-              </span>
-            </button>
-          ))}
-        </div>
+        <>
+          <label className="student-filter">
+            ابحث باسم الطالب أو المجموعة
+            <input
+              type="search"
+              value={studentSearch}
+              onChange={(event) => setStudentSearch(event.target.value)}
+              placeholder="ابدأ الكتابة…"
+            />
+          </label>
+          <div className="student-card-grid">
+            {intel?.students
+              .filter((student) =>
+                `${student.display_name} ${student.group_name}`
+                  .toLocaleLowerCase("ar")
+                  .includes(studentSearch.trim().toLocaleLowerCase("ar")),
+              )
+              .map((s) => (
+                <button
+                  className="student-insight-card"
+                  key={s.student_id}
+                  onClick={() => setSelectedStudent(s.student_id)}
+                >
+                  <span
+                    className={`classification ${s.classification.toLowerCase()}`}
+                  >
+                    {labels[s.classification]}
+                  </span>
+                  <strong>{s.display_name}</strong>
+                  <small>{s.group_name}</small>
+                  <b>{s.evaluated_count < 2 ? "—" : `${s.average_score}%`}</b>
+                  <span>
+                    {s.missing_count} تقييم ناقص · {s.weaknesses.length} نقطة
+                    ضعف متكررة
+                  </span>
+                </button>
+              ))}
+          </div>
+        </>
       )}
       {tab === "attention" && (
         <div className="attention-list">
@@ -706,6 +740,73 @@ export function MentorOperationsWorkspace({
             يدخل الترتيب من لديه تقييمان مكتملان على الأقل، وتحسب النتيجة كنسبة
             موحّدة.
           </p>
+          <form
+            className="compact-form leaderboard-filters"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void loadFilteredIntelligence();
+            }}
+          >
+            <label>
+              المجموعة
+              <select
+                value={leaderboardFilter.group_id}
+                onChange={(event) =>
+                  setLeaderboardFilter((current) => ({
+                    ...current,
+                    group_id: event.target.value,
+                  }))
+                }
+              >
+                <option value="">كل المجموعات</option>
+                {overview?.groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              التصنيف
+              <input
+                value={leaderboardFilter.category}
+                onChange={(event) =>
+                  setLeaderboardFilter((current) => ({
+                    ...current,
+                    category: event.target.value,
+                  }))
+                }
+                placeholder="مثل: عبادات"
+              />
+            </label>
+            <label>
+              من
+              <input
+                type="date"
+                value={leaderboardFilter.from}
+                onChange={(event) =>
+                  setLeaderboardFilter((current) => ({
+                    ...current,
+                    from: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label>
+              إلى
+              <input
+                type="date"
+                value={leaderboardFilter.to}
+                onChange={(event) =>
+                  setLeaderboardFilter((current) => ({
+                    ...current,
+                    to: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <button disabled={busy}>تطبيق الفلاتر</button>
+          </form>
           {intel?.leaderboard.map((r) => (
             <div key={r.student_id}>
               <b>{r.rank}</b>
@@ -788,7 +889,7 @@ export function MentorOperationsWorkspace({
                 <div className="weakness" key={`${note.created_at}-${index}`}>
                   <strong>{note.assignment}</strong>
                   <small>
-                    {note.body} ·{" "}
+                    {note.body} · {note.author_name} ·{" "}
                     {new Date(note.created_at).toLocaleDateString("ar-EG")}
                   </small>
                 </div>

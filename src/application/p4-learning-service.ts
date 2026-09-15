@@ -30,8 +30,8 @@ export class P4LearningService {
   ) {}
 
   async overview() {
-    const [content, assignments, exams, enrollments, weeks] = await Promise.all(
-      [
+    const [content, assignments, exams, enrollments, weeks, mentorAssignments] =
+      await Promise.all([
         this
           .tx`select ci.id,ci.title,ci.body,ci.published_at,pw.id week_id,pw.week_number,pw.title week_title
         from app.content_items ci join app.plan_weeks pw on pw.id=ci.plan_week_id order by pw.week_number,ci.title`,
@@ -58,8 +58,20 @@ export class P4LearningService {
         join app.cohorts c on c.current_plan_id=pp.id
         where c.workspace_id=${this.actor.workspaceId}::uuid and c.status='ACTIVE'
         order by c.starts_on desc,pw.week_number,pw.id`,
-      ],
-    );
+        this
+          .tx`select d.id,d.title,d.instructions,d.category,d.measurement_mode,d.max_score,d.pass_score,d.mandatory,
+          d.requires_note,d.requires_evidence,g.name group_name,o.id occurrence_id,o.due_at,o.status occurrence_status,
+          ev.value,ev.normalized_score,ev.status evaluation_status,ev.updated_at,
+          coalesce((select json_agg(json_build_object('body',n.body,'created_at',n.created_at) order by n.created_at desc)
+            from app.assignment_evaluation_notes n where n.evaluation_id=ev.id),'[]') notes
+        from app.assignment_targets t
+        join app.assignment_definitions d on d.id=t.assignment_definition_id and d.status='ACTIVE'
+        join app.groups g on g.id=d.group_id
+        join app.assignment_occurrences o on o.assignment_definition_id=d.id
+        left join app.assignment_evaluations ev on ev.occurrence_id=o.id and ev.enrollment_id=t.enrollment_id
+        where ${this.actor.role}='STUDENT'
+        order by o.due_at,d.title`,
+      ]);
     return {
       actor_role: this.actor.role,
       content,
@@ -67,6 +79,7 @@ export class P4LearningService {
       exams,
       enrollments,
       weeks,
+      mentor_assignments: mentorAssignments,
     };
   }
 
