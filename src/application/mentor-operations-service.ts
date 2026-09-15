@@ -217,10 +217,11 @@ export class MentorOperationsService {
         where e.workspace_id=${this.actor.workspaceId}::uuid and e.effective_to is null and app.actor_can_read_person(p.workspace_id,p.id) order by p.display_name`,
       this
         .tx`select o.id occurrence_id,o.assignment_definition_id,o.due_at,o.status occurrence_status,t.enrollment_id,
-        e.id evaluation_id,e.value,e.normalized_score,e.status,e.evidence_url,e.row_version,e.updated_at
+        e.id evaluation_id,e.value,e.normalized_score,e.status,e.evidence_url,e.row_version,e.updated_at,rp.display_name recorded_by_name
         from app.assignment_occurrences o join app.assignment_definitions d on d.id=o.assignment_definition_id
         join app.assignment_targets t on t.assignment_definition_id=d.id
         left join app.assignment_evaluations e on e.occurrence_id=o.id and e.enrollment_id=t.enrollment_id
+        left join app.login_accounts ra on ra.id=e.recorded_by_account_id left join app.persons rp on rp.id=ra.person_id
         where o.workspace_id=${this.actor.workspaceId}::uuid order by o.due_at desc`,
     ]);
     return {

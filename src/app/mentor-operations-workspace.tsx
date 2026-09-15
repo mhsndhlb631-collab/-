@@ -22,6 +22,8 @@ type Assignment = {
   max_score: number;
   pass_score: number | null;
   weight: number;
+  requires_note: boolean;
+  requires_evidence: boolean;
   occurrence_count: number;
   target_count: number;
   choices: Array<{ label: string; score: number }>;
@@ -37,6 +39,8 @@ type Evaluation = {
   normalized_score: number | null;
   status: string | null;
   row_version: number | null;
+  updated_at: string | null;
+  recorded_by_name: string | null;
 };
 type Overview = {
   groups: { id: string; name: string; cohort_name: string }[];
@@ -213,7 +217,7 @@ export function MentorOperationsWorkspace({
         },
         mandatory: f.get("mandatory") === "on",
         requires_note: f.get("requires_note") === "on",
-        requires_evidence: false,
+        requires_evidence: f.get("requires_evidence") === "on",
         max_score: Number(f.get("max_score")),
         pass_score:
           String(f.get("pass_score") ?? "") === ""
@@ -239,6 +243,9 @@ export function MentorOperationsWorkspace({
         );
         const note = String(
           f.get(`note:${row.occurrence_id}:${row.enrollment_id}`) ?? "",
+        ).trim();
+        const evidenceUrl = String(
+          f.get(`evidence:${row.occurrence_id}:${row.enrollment_id}`) ?? "",
         ).trim();
         let value: unknown = raw;
         if (assignment.measurement_mode === "BOOLEAN") value = raw === "true";
@@ -267,7 +274,7 @@ export function MentorOperationsWorkspace({
           value,
           note: note || null,
           note_visibility: "STAFF",
-          evidence_url: null,
+          evidence_url: evidenceUrl || null,
           row_version: row.row_version ?? null,
           reason: row.row_version ? "تحديث تقييم الطالب" : null,
         };
@@ -479,6 +486,10 @@ export function MentorOperationsWorkspace({
                 <input name="requires_note" type="checkbox" />
                 الملاحظة مطلوبة عند التقييم
               </label>
+              <label className="check-row">
+                <input name="requires_evidence" type="checkbox" />
+                رابط الإثبات مطلوب عند التقييم
+              </label>
               <button className="full" disabled={busy}>
                 إنشاء التكليف
               </button>
@@ -535,6 +546,47 @@ export function MentorOperationsWorkspace({
           </div>
           {assignment ? (
             <form onSubmit={saveGrades}>
+              <div className="grade-bulk-actions">
+                <label>
+                  قيمة جماعية
+                  <input name="bulk_value" placeholder="اكتب القيمة" />
+                </label>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={(event) => {
+                    const form = event.currentTarget.form;
+                    const bulk = form?.elements.namedItem(
+                      "bulk_value",
+                    ) as HTMLInputElement | null;
+                    if (!form || !bulk?.value) return;
+                    form
+                      .querySelectorAll<HTMLInputElement | HTMLSelectElement>(
+                        '[name^="value:"]',
+                      )
+                      .forEach((field) => {
+                        field.value = bulk.value;
+                      });
+                  }}
+                >
+                  تطبيق على الجميع
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={(event) => {
+                    const form = event.currentTarget.form;
+                    const missing = [
+                      ...(form?.querySelectorAll<
+                        HTMLInputElement | HTMLSelectElement
+                      >('[name^="value:"]') ?? []),
+                    ].find((field) => !field.value);
+                    missing?.focus();
+                  }}
+                >
+                  أول تقييم ناقص
+                </button>
+              </div>
               <div className="grade-table" role="table">
                 <div className="grade-head" role="row">
                   <span>الطالب</span>
@@ -625,6 +677,23 @@ export function MentorOperationsWorkspace({
                         name={`note:${row.occurrence_id}:${row.enrollment_id}`}
                         placeholder="ملاحظة تحفظ في الملف"
                       />
+                      {assignment.requires_evidence && (
+                        <input
+                          name={`evidence:${row.occurrence_id}:${row.enrollment_id}`}
+                          type="url"
+                          required
+                          placeholder="رابط الإثبات"
+                        />
+                      )}
+                      <small className="evaluation-meta">
+                        {row.status ?? "غير مسجل"}
+                        {row.updated_at
+                          ? ` · آخر تعديل ${new Date(row.updated_at).toLocaleString("ar-EG")}`
+                          : ""}
+                        {row.recorded_by_name
+                          ? ` · بواسطة ${row.recorded_by_name}`
+                          : ""}
+                      </small>
                       {row.normalized_score !== null && (
                         <small className="score-gap">
                           المحقق{" "}
