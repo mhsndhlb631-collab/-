@@ -27,6 +27,8 @@ describe("people management request", () => {
         display_name: "مربي تجريبي",
         contact_phone: null,
         login_name: "mentor_01",
+        temporary_password: "SafePass123",
+        must_change_password: true,
       }).success,
     ).toBe(true);
   });
@@ -39,6 +41,7 @@ describe("people management request", () => {
         display_name: "مسؤول آخر",
         contact_phone: null,
         login_name: "responsible_02",
+        temporary_password: "SafePass123",
       }).success,
     ).toBe(false);
     expect(

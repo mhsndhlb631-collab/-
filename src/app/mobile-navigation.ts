@@ -28,9 +28,9 @@ const destinations: Record<MobileRole, MobileDestination[]> = {
   ],
   MENTOR: [
     { view: "today", label: "اليوم", icon: "home" },
+    { view: "people", label: "طلابي", icon: "people" },
     { view: "sessions", label: "الجلسات", icon: "calendar" },
-    { view: "tracking", label: "التتبع", icon: "target" },
-    { view: "followup", label: "المتابعة", icon: "followup" },
+    { view: "learning", label: "التكاليف", icon: "learning" },
   ],
   STUDENT: [
     { view: "today", label: "اليوم", icon: "home" },

@@ -18,14 +18,25 @@ export type PersonRow = {
   group_name: string | null;
   cohort_name: string | null;
 };
-export type PeopleData = { students: PersonRow[]; mentors: PersonRow[] };
+export type PeopleData = {
+  students: PersonRow[];
+  mentors: PersonRow[];
+  groups: {
+    id: string;
+    name: string;
+    cohort_id: string;
+    cohort_name: string;
+  }[];
+};
 
 export function PeopleWorkspace({
   busy,
   command,
+  actorRole,
 }: {
   busy: boolean;
   command: (path: string, body: unknown, method?: string) => Promise<unknown>;
+  actorRole: "RESPONSIBLE" | "MENTOR";
 }) {
   const [data, setData] = useState<PeopleData | null>(null);
   const [tab, setTab] = useState<"students" | "mentors">("students");
@@ -63,12 +74,16 @@ export function PeopleWorkspace({
             contact_phone:
               String(fields.get("contact_phone") ?? "").trim() || null,
             login_name: fields.get("login_name"),
+            group_id: String(fields.get("group_id") ?? "").trim() || null,
+            temporary_password: fields.get("temporary_password"),
+            must_change_password: fields.get("must_change_password") === "on",
           }
         : {
             mode: "STUDENT_WITHOUT_ACCOUNT",
             display_name: fields.get("display_name"),
             contact_phone:
               String(fields.get("contact_phone") ?? "").trim() || null,
+            group_id: String(fields.get("group_id") ?? "").trim() || null,
           },
     )) as { temporary_password?: string | null } | undefined;
     if (!result) return;
@@ -76,8 +91,9 @@ export function PeopleWorkspace({
     form.reset();
     setStudentLogin(false);
     await load();
-    if (result.temporary_password)
-      setCredentials({ login, password: result.temporary_password });
+    const enteredPassword = String(fields.get("temporary_password") ?? "");
+    if (withAccount && enteredPassword)
+      setCredentials({ login, password: enteredPassword });
   }
 
   const rows = data?.[tab] ?? [];
@@ -88,7 +104,9 @@ export function PeopleWorkspace({
           <span className="section-kicker">إدارة الأشخاص</span>
           <h2 id="people-title">الطلاب والمربون</h2>
           <p>
-            أضف الأشخاص أولًا، ثم انتقل إلى البرنامج لتوزيعهم على المجموعات.
+            {actorRole === "RESPONSIBLE"
+              ? "أنشئ حسابات المربين، وأضف الطلاب واربطهم بالمجموعة مباشرة."
+              : "أضف طلاب مجموعتك؛ سيظهرون فورًا في التقييم والمتابعة."}
           </p>
         </div>
         <div className="hero-counts" aria-label="أعداد الأشخاص">
@@ -152,7 +170,7 @@ export function PeopleWorkspace({
           <p className="muted">
             {tab === "students"
               ? "يمكن بدء ملف الطالب بلا حساب وإضافة حساب له عند الحاجة."
-              : "ينشأ للمربي حساب دخول بكلمة مؤقتة صالحة لمدة 24 ساعة."}
+              : "اكتب اسم الدخول وكلمة المرور المؤقتة التي سترسلها للمربي."}
           </p>
           <form
             className="stack"
@@ -164,6 +182,19 @@ export function PeopleWorkspace({
               الاسم الكامل
               <input name="display_name" minLength={2} required />
             </label>
+            {(tab === "students" || tab === "mentors") && (
+              <label>
+                {tab === "students" ? "المجموعة" : "إسناده إلى مجموعة"}
+                <select name="group_id" required={actorRole === "MENTOR"}>
+                  <option value="">اختر المجموعة</option>
+                  {(data?.groups ?? []).map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.cohort_name} · {group.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label>
               رقم الهاتف <span className="optional">اختياري</span>
               <input name="contact_phone" inputMode="tel" />
@@ -179,16 +210,37 @@ export function PeopleWorkspace({
               </label>
             )}
             {(tab === "mentors" || studentLogin) && (
-              <label>
-                اسم الدخول
-                <input
-                  name="login_name"
-                  minLength={3}
-                  maxLength={32}
-                  autoComplete="off"
-                  required
-                />
-              </label>
+              <>
+                <label>
+                  اسم الدخول
+                  <input
+                    name="login_name"
+                    minLength={3}
+                    maxLength={32}
+                    autoComplete="off"
+                    required
+                  />
+                </label>
+                <label>
+                  كلمة المرور المؤقتة
+                  <input
+                    name="temporary_password"
+                    type="password"
+                    minLength={8}
+                    maxLength={72}
+                    autoComplete="new-password"
+                    required
+                  />
+                </label>
+                <label className="check-row">
+                  <input
+                    name="must_change_password"
+                    type="checkbox"
+                    defaultChecked
+                  />
+                  يغيّر كلمة المرور عند أول دخول
+                </label>
+              </>
             )}
             <button disabled={busy}>
               {busy
@@ -211,15 +263,17 @@ export function PeopleWorkspace({
             >
               الطلاب <span>{data?.students.length ?? 0}</span>
             </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "mentors"}
-              className={tab === "mentors" ? "active" : "secondary"}
-              onClick={() => setTab("mentors")}
-            >
-              المربون <span>{data?.mentors.length ?? 0}</span>
-            </button>
+            {actorRole === "RESPONSIBLE" && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "mentors"}
+                className={tab === "mentors" ? "active" : "secondary"}
+                onClick={() => setTab("mentors")}
+              >
+                المربون <span>{data?.mentors.length ?? 0}</span>
+              </button>
+            )}
           </div>
           {!data ? (
             <p className="empty">جارٍ تحميل القائمة…</p>

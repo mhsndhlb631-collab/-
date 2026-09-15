@@ -18,11 +18,12 @@ describe("offline daily dataset", () => {
     expect(paths).not.toContain("/api/v1/people");
   });
 
-  it("preloads staff follow-up queues without exposing responsible-only people", () => {
+  it("preloads the mentor's scoped students and operational queues", () => {
     const paths = offlinePreloadPaths("MENTOR", sessions);
     expect(paths).toContain("/api/v1/attention");
     expect(paths).toContain("/api/v1/actions");
-    expect(paths).not.toContain("/api/v1/people");
+    expect(paths).toContain("/api/v1/people");
+    expect(paths).toContain("/api/v1/mentor-operations");
   });
 
   it("keeps detailed session preloading deliberately bounded", () => {

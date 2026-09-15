@@ -1,5 +1,4 @@
 import "server-only";
-import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { PeopleService, peopleRequest } from "../application/people-service";
@@ -42,6 +41,7 @@ export function peopleCommand(request: Request) {
           {
             display_name: parsed.data.display_name,
             contact_phone: parsed.data.contact_phone,
+            group_id: parsed.data.group_id,
           },
           idempotencyKey,
         ),
@@ -57,6 +57,7 @@ export function peopleCommand(request: Request) {
             contact_phone: accountData.contact_phone,
             login_name: accountData.login_name,
             role: accountData.role,
+            group_id: accountData.group_id,
           },
           idempotencyKey,
         ),
@@ -82,7 +83,7 @@ export function peopleCommand(request: Request) {
         },
       },
     );
-    const temporaryPassword = randomBytes(18).toString("base64url");
+    const temporaryPassword = accountData.temporary_password;
     const email = `${reservation.account_id.toLowerCase()}@${env.AUTH_INTERNAL_EMAIL_DOMAIN.toLowerCase()}`;
     let authUserId = state.auth_user_id;
     if (!authUserId) {
@@ -113,8 +114,9 @@ export function peopleCommand(request: Request) {
       new PeopleService(tx, actor, requestId).activateAccount(
         reservation.account_id,
         authUserId!,
+        accountData.must_change_password,
       ),
     );
-    return { ...reservation, temporary_password: temporaryPassword };
+    return { ...reservation, login_name: accountData.login_name };
   });
 }

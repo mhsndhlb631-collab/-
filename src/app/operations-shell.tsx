@@ -7,6 +7,7 @@ import { FollowupWorkspace } from "./followup-workspace";
 import { ResponsibleCenter } from "./responsible-center";
 import { JourneyPanel } from "./journey-panel";
 import { PeopleWorkspace } from "./people-workspace";
+import { MentorOperationsWorkspace } from "./mentor-operations-workspace";
 import { DistributionWorkspace } from "./distribution-workspace";
 import { PremiumToday } from "./premium-today";
 import { QiwamIcon, type QiwamIconName } from "./qiwam-icon";
@@ -579,6 +580,7 @@ export function OperationsShell() {
       : data.actor_role === "MENTOR"
         ? [
             "today",
+            "people",
             "sessions",
             "tracking",
             "learning",
@@ -899,8 +901,12 @@ export function OperationsShell() {
               open={setActiveView}
             />
           )}
-          {activeView === "people" && data.actor_role === "RESPONSIBLE" && (
-            <PeopleWorkspace busy={busy} command={command} />
+          {activeView === "people" && data.actor_role !== "STUDENT" && (
+            <PeopleWorkspace
+              busy={busy}
+              command={command}
+              actorRole={data.actor_role}
+            />
           )}
           {activeView === "program" && (
             <JourneyPanel key="program" kind="program" />
@@ -965,12 +971,15 @@ export function OperationsShell() {
               command={command}
             />
           )}
-          {activeView === "learning" && (
+          {activeView === "learning" && data.actor_role === "STUDENT" && (
             <LearningWorkspace
               busy={busy}
               actorRole={data.actor_role}
               command={command}
             />
+          )}
+          {activeView === "learning" && data.actor_role !== "STUDENT" && (
+            <MentorOperationsWorkspace busy={busy} command={command} />
           )}
           {activeView === "followup" && data.actor_role !== "STUDENT" && (
             <FollowupWorkspace busy={busy} command={command} />

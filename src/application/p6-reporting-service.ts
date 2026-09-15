@@ -174,7 +174,9 @@ export class P6ReportingService {
       (select count(*)::int from app.attentions at where at.workspace_id=a.workspace_id and at.owner_account_id=a.id and at.status in ('OPEN','IN_PROGRESS','SNOOZED')) active_attention_count,
       (select count(*)::int from app.cases c where c.workspace_id=a.workspace_id and c.owner_account_id=a.id and c.status in ('OPEN','MONITORING')) open_case_count
       from app.login_accounts a join app.persons p on p.id=a.person_id
-      where a.workspace_id=${this.actor.workspaceId}::uuid and a.role='MENTOR' and a.status='ACTIVE' order by p.display_name,a.id`;
+      where a.workspace_id=${this.actor.workspaceId}::uuid and a.role in ('MENTOR','RESPONSIBLE') and a.status='ACTIVE'
+        and (a.role='MENTOR' or exists(select 1 from app.mentor_assignments own where own.workspace_id=a.workspace_id and own.mentor_person_id=a.person_id and own.effective_to is null))
+      order by p.display_name,a.id`;
   }
 
   async performance(mentorValue: unknown, query: unknown) {
@@ -182,7 +184,7 @@ export class P6ReportingService {
     const mentor = parse(id, mentorValue),
       { from, to } = parse(periodSchema, query);
     const mentorRows = await this
-      .tx`select a.id,p.display_name from app.login_accounts a join app.persons p on p.id=a.person_id where a.id=${mentor}::uuid and a.workspace_id=${this.actor.workspaceId}::uuid and a.role='MENTOR' and a.status='ACTIVE'`;
+      .tx`select a.id,p.display_name from app.login_accounts a join app.persons p on p.id=a.person_id where a.id=${mentor}::uuid and a.workspace_id=${this.actor.workspaceId}::uuid and a.role in ('MENTOR','RESPONSIBLE') and a.status='ACTIVE'`;
     if (!mentorRows[0]) throw new AppError("NOT_FOUND");
     const rows = await this.tx<Opportunity[]>`
       with operational as (
@@ -215,6 +217,14 @@ export class P6ReportingService {
         where so.workspace_id=${this.actor.workspaceId}::uuid and la.id=${mentor}::uuid
           and ma.effective_from<=so.starts_at and (ma.effective_to is null or ma.effective_to>so.starts_at)
           and so.ends_at::date between ${from}::date and ${to}::date and so.ends_at<=clock_timestamp()
+        union all
+        select 'data','assignment_evaluation',t.enrollment_id,o.due_at,(v.id is not null)
+        from app.assignment_occurrences o join app.assignment_definitions d on d.id=o.assignment_definition_id
+        join app.assignment_targets t on t.assignment_definition_id=d.id
+        join app.mentor_assignments ma on ma.group_id=d.group_id and ma.workspace_id=d.workspace_id
+        join app.login_accounts la on la.person_id=ma.mentor_person_id and la.workspace_id=ma.workspace_id
+        left join app.assignment_evaluations v on v.occurrence_id=o.id and v.enrollment_id=t.enrollment_id
+        where o.workspace_id=${this.actor.workspaceId}::uuid and la.id=${mentor}::uuid and o.due_at::date between ${from}::date and ${to}::date and o.due_at<=clock_timestamp()
       ), case_response as (
         select 'case_response','action',ac.id,ac.due_at,(
           (ac.completed_at is not null and ac.completed_at<=ac.due_at) or exists(select 1 from app.case_events ce where ce.case_id=ac.case_id and ce.event_type='ESCALATED' and ce.created_at<=ac.due_at))

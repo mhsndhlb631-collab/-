@@ -11,6 +11,7 @@ const personInput = z
   .object({
     display_name: z.string().trim().min(2).max(160),
     contact_phone: z.string().trim().min(6).max(30).nullable().default(null),
+    group_id: z.uuid().nullable().default(null),
   })
   .strict();
 const accountInput = personInput
@@ -22,6 +23,9 @@ const accountInput = personInput
 
 function responsible(actor: RequestActor) {
   if (actor.role !== "RESPONSIBLE") throw new AppError("FORBIDDEN");
+}
+function staff(actor: RequestActor) {
+  if (actor.role === "STUDENT") throw new AppError("FORBIDDEN");
 }
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
@@ -37,7 +41,7 @@ export class PeopleService {
   ) {}
 
   async list() {
-    responsible(this.actor);
+    staff(this.actor);
     const people = await this.tx`
       select p.id person_id,p.display_name,p.contact_phone,
         sp.id student_profile_id,la.id account_id,la.normalized_login_name login_name,
@@ -52,15 +56,26 @@ export class PeopleService {
       left join app.cohorts c on c.id=e.cohort_id
       where p.workspace_id=${this.actor.workspaceId}::uuid and p.archived_at is null
         and (sp.id is not null or la.role='MENTOR')
+        and (${this.actor.role}='RESPONSIBLE' or (sp.id is not null and app.actor_can_read_person(p.workspace_id,p.id)))
       order by case when la.role='MENTOR' then 0 else 1 end,p.display_name,p.id`;
+    const groups = await this.tx`
+      select g.id,g.name,g.cohort_id,c.name cohort_name
+      from app.groups g join app.cohorts c on c.id=g.cohort_id
+      where g.workspace_id=${this.actor.workspaceId}::uuid and g.status='ACTIVE'
+        and (${this.actor.role}='RESPONSIBLE' or app.actor_can_read_group(g.workspace_id,g.id))
+      order by c.name,g.name`;
     return {
       students: people.filter((person) => person.student_profile_id),
-      mentors: people.filter((person) => person.role === "MENTOR"),
+      mentors:
+        this.actor.role === "RESPONSIBLE"
+          ? people.filter((person) => person.role === "MENTOR")
+          : [],
+      groups,
     };
   }
 
   createStudent(value: unknown, idempotencyKey: unknown) {
-    responsible(this.actor);
+    staff(this.actor);
     const body = parse(personInput, value);
     const stableKey = parse(key, idempotencyKey);
     return idempotent({
@@ -70,6 +85,16 @@ export class PeopleService {
       key: stableKey,
       payload: body,
       work: async () => {
+        let group: { id: string; cohort_id: string } | undefined;
+        if (body.group_id) {
+          const rows = await this.tx<{ id: string; cohort_id: string }[]>`
+            select id,cohort_id from app.groups where id=${body.group_id}::uuid
+              and workspace_id=${this.actor.workspaceId}::uuid and status='ACTIVE'
+              and (${this.actor.role}='RESPONSIBLE' or app.actor_can_read_group(workspace_id,id))`;
+          group = rows[0];
+          if (!group) throw new AppError("FORBIDDEN");
+        } else if (this.actor.role === "MENTOR")
+          throw new AppError("VALIDATION_ERROR");
         const personId = randomUUID();
         const profileId = randomUUID();
         await this
@@ -78,6 +103,16 @@ export class PeopleService {
         await this
           .tx`insert into app.student_profiles(id,workspace_id,person_id)
           values(${profileId}::uuid,${this.actor.workspaceId}::uuid,${personId}::uuid)`;
+        let enrollmentId: string | null = null;
+        if (group) {
+          enrollmentId = randomUUID();
+          await this
+            .tx`insert into app.enrollments(id,workspace_id,student_profile_id,cohort_id,effective_from)
+            values(${enrollmentId}::uuid,${this.actor.workspaceId}::uuid,${profileId}::uuid,${group.cohort_id}::uuid,clock_timestamp())`;
+          await this
+            .tx`insert into app.group_memberships(workspace_id,enrollment_id,group_id,effective_from)
+            values(${this.actor.workspaceId}::uuid,${enrollmentId}::uuid,${group.id}::uuid,clock_timestamp())`;
+        }
         await audit(
           this.tx,
           this.actor,
@@ -90,6 +125,7 @@ export class PeopleService {
           id: personId,
           person_id: personId,
           student_profile_id: profileId,
+          enrollment_id: enrollmentId,
         };
       },
     });
@@ -142,6 +178,14 @@ export class PeopleService {
         await this
           .tx`insert into app.login_accounts(id,workspace_id,person_id,normalized_login_name,role,status,must_change_password)
           values(${accountId}::uuid,${this.actor.workspaceId}::uuid,${personId}::uuid,${loginName},${body.role}::app.account_role,'PROVISIONING',true)`;
+        if (body.role === "MENTOR" && body.group_id) {
+          const group = await this.tx<{ id: string }[]>`
+            select id from app.groups where id=${body.group_id}::uuid and workspace_id=${this.actor.workspaceId}::uuid and status='ACTIVE'`;
+          if (!group[0]) throw new AppError("VALIDATION_ERROR");
+          await this
+            .tx`insert into app.mentor_assignments(workspace_id,group_id,mentor_person_id,effective_from)
+            values(${this.actor.workspaceId}::uuid,${body.group_id}::uuid,${personId}::uuid,clock_timestamp())`;
+        }
         await audit(
           this.tx,
           this.actor,
@@ -171,11 +215,15 @@ export class PeopleService {
     return rows[0];
   }
 
-  async activateAccount(accountId: string, authUserId: string) {
+  async activateAccount(
+    accountId: string,
+    authUserId: string,
+    mustChangePassword = true,
+  ) {
     responsible(this.actor);
     const rows = await this.tx<{ id: string }[]>`
       update app.login_accounts set supabase_auth_user_id=${authUserId}::uuid,status='ACTIVE',
-        must_change_password=true,temporary_password_expires_at=clock_timestamp()+interval '24 hours',
+        must_change_password=${mustChangePassword},temporary_password_expires_at=case when ${mustChangePassword} then clock_timestamp()+interval '24 hours' else null end,
         updated_at=clock_timestamp(),row_version=row_version+1
       where id=${accountId}::uuid and workspace_id=${this.actor.workspaceId}::uuid
         and status='PROVISIONING' and (supabase_auth_user_id is null or supabase_auth_user_id=${authUserId}::uuid)
@@ -204,5 +252,12 @@ export const peopleRequest = z.discriminatedUnion("mode", [
       ...personInput.shape,
     })
     .strict(),
-  z.object({ mode: z.literal("ACCOUNT"), ...accountInput.shape }).strict(),
+  z
+    .object({
+      mode: z.literal("ACCOUNT"),
+      ...accountInput.shape,
+      temporary_password: z.string().min(8).max(72),
+      must_change_password: z.boolean().default(true),
+    })
+    .strict(),
 ]);

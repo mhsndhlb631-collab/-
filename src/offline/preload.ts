@@ -32,15 +32,17 @@ export function offlinePreloadPaths(
   const staff =
     role === "STUDENT"
       ? []
-      : ["/api/v1/attention", "/api/v1/actions", "/api/v1/cases"];
+      : [
+          "/api/v1/attention",
+          "/api/v1/actions",
+          "/api/v1/cases",
+          "/api/v1/people",
+          "/api/v1/mentor-operations",
+          "/api/v1/mentor-operations?view=intelligence",
+        ];
   const responsible =
     role === "RESPONSIBLE"
-      ? [
-          "/api/v1/people",
-          "/api/v1/today",
-          "/api/v1/mentors",
-          "/api/v1/audit-events?limit=6",
-        ]
+      ? ["/api/v1/today", "/api/v1/mentors", "/api/v1/audit-events?limit=6"]
       : [];
   const sessionDetails = [...sessions]
     .sort((left, right) => {
