@@ -90,6 +90,20 @@ function commandName(method: string, path: string) {
     .toUpperCase()}`;
 }
 
+function optimisticData(path: string, body: unknown) {
+  if (
+    path === "/api/v1/people" &&
+    body &&
+    typeof body === "object" &&
+    "temporary_password" in body
+  ) {
+    const safe = { ...(body as Record<string, unknown>) };
+    delete safe.temporary_password;
+    return safe;
+  }
+  return body;
+}
+
 async function applySessionOptimism(
   scope: string,
   path: string,
@@ -380,7 +394,7 @@ async function enqueue(
       payload: body,
       dependencies: [],
       baseVersion: firstRowVersion(body),
-      optimisticData: body,
+      optimisticData: optimisticData(path, body),
     });
   } catch (error) {
     if (storageIsFull(error))

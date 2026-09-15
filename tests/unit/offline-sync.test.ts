@@ -239,4 +239,36 @@ describe("SyncManager", () => {
       status: "synced",
     });
   });
+
+  it("removes a temporary account password after successful synchronization", async () => {
+    const { db, repository } = setup();
+    await repository.enqueue({
+      ...mutation,
+      id: "mentor-account",
+      entityType: "domain_command",
+      entityId: "mentor-account",
+      path: "/api/v1/people",
+      payload: {
+        mode: "ACCOUNT",
+        display_name: "مربي",
+        temporary_password: "temporary-secret",
+      },
+      optimisticData: { mode: "ACCOUNT", display_name: "مربي" },
+    });
+    const manager = new SyncManager(repository, async () => ({
+      ok: true,
+      status: 200,
+      body: { id: "server-account" },
+      requestId: "request-account",
+    }));
+
+    await manager.run("scope-1");
+
+    expect(await db.outbox.get("mentor-account")).not.toHaveProperty(
+      "payload.temporary_password",
+    );
+    expect(
+      await db.records.get("scope-1:domain_command:mentor-account"),
+    ).not.toHaveProperty("data.temporary_password");
+  });
 });

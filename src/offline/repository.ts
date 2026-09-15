@@ -40,6 +40,18 @@ function recordSyncStatus(operation: QueuedMutation["operation"]): SyncStatus {
   return "pending_update";
 }
 
+function withoutTemporaryCredential(payload: unknown) {
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    !("temporary_password" in payload)
+  )
+    return payload;
+  const safe = { ...(payload as Record<string, unknown>) };
+  delete safe.temporary_password;
+  return safe;
+}
+
 export class OfflineRepository {
   constructor(private readonly db: MinhajOfflineDatabase) {}
 
@@ -283,6 +295,7 @@ export class OfflineRepository {
   ) {
     const timestamp = now();
     const serverId = typeof result?.id === "string" ? result.id : null;
+    const safePayload = withoutTemporaryCredential(item.payload);
     await this.db.transaction(
       "rw",
       this.db.outbox,
@@ -295,6 +308,7 @@ export class OfflineRepository {
           nextAttemptAt: null,
           requestId,
           error: null,
+          payload: safePayload,
         });
         const target = scopedRecordId(
           item.scopeId,
@@ -307,6 +321,7 @@ export class OfflineRepository {
           deviceMutationId: null,
           lastSyncedAt: timestamp,
           updatedAt: timestamp,
+          data: result ?? safePayload,
         });
         if (serverId && serverId !== item.entityId)
           await this.db.idMap.put({
