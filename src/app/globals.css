@@ -4840,6 +4840,23 @@ textarea {
   height: 44px;
 }
 
+/* People totals are supporting information, so keep them compact. */
+.people-workspace .workspace-hero {
+  min-height: 0;
+  padding: 16px 18px;
+}
+.people-workspace .hero-counts span {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  min-width: 74px;
+  padding: 7px 10px;
+}
+.people-workspace .hero-counts strong {
+  font-size: 1.05rem;
+}
+
 @media (max-width: 800px) {
   html {
     -webkit-text-size-adjust: 100%;
@@ -4913,6 +4930,35 @@ textarea {
     padding: 14px;
     background: inherit;
     border-block-end: 1px solid var(--q-border, var(--line));
+  }
+  .people-workspace .workspace-hero {
+    flex-direction: row;
+    align-items: center;
+    padding: 12px 14px;
+  }
+  .people-workspace .workspace-hero > div:first-child {
+    min-width: 0;
+  }
+  .people-workspace .workspace-hero h2 {
+    font-size: 1.15rem;
+    white-space: nowrap;
+  }
+  .people-workspace .workspace-hero p {
+    display: none;
+  }
+  .people-workspace .hero-counts {
+    display: flex;
+    flex: 0 0 auto;
+    width: auto;
+    gap: 5px;
+  }
+  .people-workspace .hero-counts span {
+    min-width: 58px;
+    padding: 6px 8px;
+    font-size: 0.75rem;
+  }
+  .people-workspace .hero-counts strong {
+    font-size: 0.95rem;
   }
   .today-priority-grid {
     grid-template-columns: minmax(0, 1fr);

@@ -152,7 +152,7 @@ export class PeopleService {
           }[]
         >`select la.id account_id,la.person_id,sp.id student_profile_id,la.role
           from app.login_accounts la left join app.student_profiles sp on sp.person_id=la.person_id
-          where la.normalized_login_name=${loginName} for update`;
+          where la.normalized_login_name=${loginName} for update of la`;
         if (existing[0]) {
           if (existing[0].role !== body.role)
             throw new AppError("INVALID_STATE_TRANSITION");

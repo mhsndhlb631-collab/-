@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { readJson } from "../offline/client";
 
 export type PersonRow = {
@@ -46,15 +46,16 @@ export function PeopleWorkspace({
     password: string;
   } | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     const result = await readJson<PeopleData>("/api/v1/people");
     setData(result.data);
-  }
-  useEffect(() => {
-    void readJson<PeopleData>("/api/v1/people")
-      .then((result) => setData(result.data))
-      .catch(() => undefined);
   }, []);
+  useEffect(() => {
+    const refresh = () => void load().catch(() => undefined);
+    refresh();
+    window.addEventListener("minhaj:sync-finished", refresh);
+    return () => window.removeEventListener("minhaj:sync-finished", refresh);
+  }, [load]);
 
   async function create(
     event: FormEvent<HTMLFormElement>,
@@ -64,33 +65,61 @@ export function PeopleWorkspace({
     const form = event.currentTarget;
     const fields = new FormData(form);
     const withAccount = role === "MENTOR" || studentLogin;
-    const result = (await command(
-      "/api/v1/people",
-      withAccount
-        ? {
-            mode: "ACCOUNT",
-            role,
-            display_name: fields.get("display_name"),
-            contact_phone:
-              String(fields.get("contact_phone") ?? "").trim() || null,
-            login_name: fields.get("login_name"),
-            group_id: String(fields.get("group_id") ?? "").trim() || null,
-            temporary_password: fields.get("temporary_password"),
-            must_change_password: fields.get("must_change_password") === "on",
-          }
-        : {
-            mode: "STUDENT_WITHOUT_ACCOUNT",
-            display_name: fields.get("display_name"),
-            contact_phone:
-              String(fields.get("contact_phone") ?? "").trim() || null,
-            group_id: String(fields.get("group_id") ?? "").trim() || null,
-          },
-    )) as { temporary_password?: string | null } | undefined;
+    const body = withAccount
+      ? {
+          mode: "ACCOUNT",
+          role,
+          display_name: fields.get("display_name"),
+          contact_phone:
+            String(fields.get("contact_phone") ?? "").trim() || null,
+          login_name: fields.get("login_name"),
+          group_id: String(fields.get("group_id") ?? "").trim() || null,
+          temporary_password: fields.get("temporary_password"),
+          must_change_password: fields.get("must_change_password") === "on",
+        }
+      : {
+          mode: "STUDENT_WITHOUT_ACCOUNT",
+          display_name: fields.get("display_name"),
+          contact_phone:
+            String(fields.get("contact_phone") ?? "").trim() || null,
+          group_id: String(fields.get("group_id") ?? "").trim() || null,
+        };
+    const result = (await command("/api/v1/people", body)) as
+      | {
+          id?: string;
+          queued_offline?: boolean;
+          temporary_password?: string | null;
+        }
+      | undefined;
     if (!result) return;
     const login = String(fields.get("login_name") ?? "");
     form.reset();
     setStudentLogin(false);
-    await load();
+    if (result.queued_offline && result.id) {
+      const group = data?.groups.find((item) => item.id === body.group_id);
+      const pending: PersonRow = {
+        person_id: result.id,
+        display_name: String(body.display_name),
+        contact_phone: body.contact_phone,
+        student_profile_id: role === "STUDENT" ? result.id : null,
+        account_id: withAccount ? result.id : null,
+        login_name: withAccount ? String(body.login_name) : null,
+        role: withAccount ? role : null,
+        status: withAccount ? "PENDING_SYNC" : null,
+        enrollment_id: role === "STUDENT" && group ? result.id : null,
+        cohort_id: group?.cohort_id ?? null,
+        group_id: group?.id ?? null,
+        group_name: group?.name ?? null,
+        cohort_name: group?.cohort_name ?? null,
+      };
+      setData((current) => {
+        if (!current) return current;
+        const key = role === "STUDENT" ? "students" : "mentors";
+        if (current[key].some((person) => person.person_id === result.id))
+          return current;
+        return { ...current, [key]: [...current[key], pending] };
+      });
+    } else await load();
     const enteredPassword = String(fields.get("temporary_password") ?? "");
     if (withAccount && enteredPassword)
       setCredentials({ login, password: enteredPassword });

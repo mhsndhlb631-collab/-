@@ -246,11 +246,7 @@ export function OperationsShell() {
         method as "POST" | "PUT" | "PATCH" | "DELETE",
       );
       if (!result.queued_offline) await load();
-      setMessage(
-        result.queued_offline
-          ? "تم حفظ التغيير على الجهاز، وسيُزامن عند عودة الاتصال."
-          : "تم الحفظ بنجاح.",
-      );
+      setMessage(result.queued_offline ? "تم الحفظ." : "تم الحفظ بنجاح.");
       return result;
     } catch (error) {
       if (error instanceof CommandError && error.status === 401) {

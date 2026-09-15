@@ -212,4 +212,31 @@ describe("SyncManager", () => {
     expect(retryAt(2, origin)).toBe("2026-01-01T00:00:03.000Z");
     expect(retryAt(99, origin)).toBe("2026-01-01T00:01:00.000Z");
   });
+
+  it("lets an explicit user retry bypass the automatic backoff delay", async () => {
+    const { db, repository } = setup();
+    const item = await repository.enqueue({ ...mutation, id: "retry-now" });
+    await repository.defer(item, new Date(Date.now() + 60_000).toISOString(), {
+      code: "NETWORK_FAILURE",
+      message: "offline",
+      httpStatus: null,
+      requestId: null,
+    });
+    const transport = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: { id: "server-record" },
+      requestId: "request-retry",
+    });
+    const manager = new SyncManager(repository, transport);
+
+    await manager.run("scope-1");
+    expect(transport).not.toHaveBeenCalled();
+    await manager.run("scope-1", { force: true });
+
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(await db.outbox.get("retry-now")).toMatchObject({
+      status: "synced",
+    });
+  });
 });

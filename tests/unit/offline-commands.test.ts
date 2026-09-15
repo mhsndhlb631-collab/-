@@ -127,4 +127,66 @@ describe("offline commands", () => {
     ).rejects.toBeInstanceOf(CommandError);
     expect(await deviceRepository().pending(scope.id)).toHaveLength(0);
   });
+
+  it("shows a newly saved student immediately while offline", async () => {
+    const scope = await saveAuthenticatedIdentity(identity);
+    await cacheJson(scope.id, "/api/v1/people", {
+      students: [],
+      mentors: [],
+      groups: [
+        {
+          id: "group-1",
+          name: "المجموعة الأولى",
+          cohort_id: "cohort-1",
+          cohort_name: "الدفعة الأولى",
+        },
+      ],
+    });
+    vi.stubGlobal("navigator", { onLine: false });
+
+    const result = await writeJson("/api/v1/people", {
+      mode: "STUDENT_WITHOUT_ACCOUNT",
+      display_name: "طالب محفوظ",
+      contact_phone: null,
+      group_id: "group-1",
+    });
+    const people = await deviceRepository().snapshot<{
+      students: Array<Record<string, unknown>>;
+    }>(scope.id, "/api/v1/people");
+
+    expect(result.queued_offline).toBe(true);
+    expect(people?.payload.students).toEqual([
+      expect.objectContaining({
+        display_name: "طالب محفوظ",
+        group_name: "المجموعة الأولى",
+        saved_on_device: true,
+      }),
+    ]);
+  });
+
+  it("surfaces internal server failures instead of disguising them as offline work", async () => {
+    const scope = await saveAuthenticatedIdentity(identity);
+    vi.stubGlobal("navigator", { onLine: true });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json(
+            { code: "INTERNAL_ERROR", message: "تعذر إتمام العملية." },
+            { status: 500 },
+          ),
+        ),
+    );
+
+    await expect(
+      writeJson("/api/v1/people", {
+        mode: "STUDENT_WITHOUT_ACCOUNT",
+        display_name: "طالب",
+        contact_phone: null,
+        group_id: null,
+      }),
+    ).rejects.toMatchObject({ status: 500, code: "INTERNAL_ERROR" });
+    expect(await deviceRepository().pending(scope.id)).toHaveLength(0);
+  });
 });

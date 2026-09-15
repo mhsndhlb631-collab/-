@@ -297,6 +297,64 @@ async function applyFollowupOptimism(
   );
 }
 
+async function applyPeopleOptimism(
+  scope: string,
+  path: string,
+  body: unknown,
+  mutationId: string,
+) {
+  if (path !== "/api/v1/people") return;
+  const input = body as {
+    mode?: "ACCOUNT" | "STUDENT_WITHOUT_ACCOUNT";
+    role?: "MENTOR" | "STUDENT";
+    display_name?: string;
+    contact_phone?: string | null;
+    login_name?: string;
+    group_id?: string | null;
+  };
+  const role =
+    input.mode === "STUDENT_WITHOUT_ACCOUNT" ? "STUDENT" : input.role;
+  if (!role || typeof input.display_name !== "string") return;
+  await deviceRepository().mutateSnapshots(
+    scope,
+    (resource) => resource === "/api/v1/people",
+    (payload) => {
+      if (!payload || typeof payload !== "object") return payload;
+      const result = structuredClone(payload) as {
+        students?: Array<Record<string, unknown>>;
+        mentors?: Array<Record<string, unknown>>;
+        groups?: Array<{
+          id: string;
+          name: string;
+          cohort_id: string;
+          cohort_name: string;
+        }>;
+      };
+      const target = role === "STUDENT" ? result.students : result.mentors;
+      if (!target || target.some((person) => person.person_id === mutationId))
+        return result;
+      const group = result.groups?.find((item) => item.id === input.group_id);
+      target.push({
+        person_id: mutationId,
+        display_name: input.display_name,
+        contact_phone: input.contact_phone ?? null,
+        student_profile_id: role === "STUDENT" ? mutationId : null,
+        account_id: input.mode === "ACCOUNT" ? mutationId : null,
+        login_name: input.login_name ?? null,
+        role: input.mode === "ACCOUNT" ? role : null,
+        status: input.mode === "ACCOUNT" ? "PENDING_SYNC" : null,
+        enrollment_id: role === "STUDENT" && group ? mutationId : null,
+        cohort_id: group?.cohort_id ?? null,
+        group_id: group?.id ?? null,
+        group_name: group?.name ?? null,
+        cohort_name: group?.cohort_name ?? null,
+        saved_on_device: true,
+      });
+      return result;
+    },
+  );
+}
+
 async function enqueue(
   path: string,
   body: unknown,
@@ -339,6 +397,7 @@ async function enqueue(
     applyTrackingOptimism(scope, path, body),
     applyLearningOptimism(scope, path, body, mutationId),
     applyFollowupOptimism(scope, path, mutationId),
+    applyPeopleOptimism(scope, path, body, mutationId),
   ]);
   if (typeof window !== "undefined")
     window.dispatchEvent(new CustomEvent("minhaj:outbox-changed"));
@@ -374,7 +433,7 @@ export async function writeJson(
       message?: string;
     };
     if (response.ok) return result;
-    if (response.status === 429 || response.status >= 500)
+    if ([429, 502, 503, 504].includes(response.status))
       return enqueue(path, body, method, mutationId, idempotencyKey);
     throw new CommandError(
       result.message ?? "تعذر تنفيذ العملية.",

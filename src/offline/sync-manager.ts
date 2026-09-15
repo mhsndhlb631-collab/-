@@ -37,7 +37,7 @@ export class SyncManager {
     private readonly transport: SyncTransport,
   ) {}
 
-  async run(targetScopeId: string) {
+  async run(targetScopeId: string, options: { force?: boolean } = {}) {
     if (this.running) return { processed: 0, skipped: true };
     this.running = true;
     let processed = 0;
@@ -45,7 +45,11 @@ export class SyncManager {
       await this.repository.recoverInterrupted(targetScopeId);
       const queue = await this.repository.pending(targetScopeId);
       for (const item of queue) {
-        if (item.nextAttemptAt && item.nextAttemptAt > new Date().toISOString())
+        if (
+          !options.force &&
+          item.nextAttemptAt &&
+          item.nextAttemptAt > new Date().toISOString()
+        )
           continue;
         const dependenciesReady = await Promise.all(
           item.dependencies.map((id) => this.repository.dependencyIsSynced(id)),
@@ -154,6 +158,7 @@ export class SyncManager {
 
 export function httpSyncTransport(
   fetcher: typeof fetch = fetch,
+  reportStatus?: (status: number) => void,
 ): SyncTransport {
   return async (item) => {
     const response = await fetcher(item.path, {
@@ -164,6 +169,7 @@ export function httpSyncTransport(
       },
       body: JSON.stringify(item.payload),
     });
+    reportStatus?.(response.status);
     let body: Record<string, unknown> | null = null;
     try {
       body = (await response.json()) as Record<string, unknown>;

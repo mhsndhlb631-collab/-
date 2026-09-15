@@ -124,7 +124,7 @@ export function SyncStatus() {
   async function sync() {
     setBusy(true);
     try {
-      await synchronizeNow();
+      await synchronizeNow({ force: true });
       await refresh();
     } finally {
       setBusy(false);
@@ -283,7 +283,7 @@ export function SyncStatus() {
                 <button
                   type="button"
                   className="primary"
-                  disabled={busy || kind === "offline"}
+                  disabled={busy}
                   onClick={() => void sync()}
                 >
                   <QiwamIcon name="sync" size={17} />

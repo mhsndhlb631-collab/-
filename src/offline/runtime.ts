@@ -7,6 +7,7 @@ let manager: SyncManager | null = null;
 const listeners = new Set<RuntimeListener>();
 let startedScope: string | null = null;
 let cleanup: (() => void) | null = null;
+let retryTimer: number | null = null;
 
 function notify() {
   for (const listener of listeners) listener();
@@ -22,11 +23,48 @@ async function withBrowserLock<T>(scope: string, work: () => Promise<T>) {
   return work();
 }
 
-export async function synchronizeNow() {
+async function scheduleNextRetry(scope: string) {
+  if (typeof window === "undefined" || startedScope !== scope) return;
+  if (retryTimer !== null) window.clearTimeout(retryTimer);
+  retryTimer = null;
+  const pending = await deviceRepository().pending(scope);
+  if (!pending.length) return;
+  const eligible = (
+    await Promise.all(
+      pending.map(async (item) => ({
+        item,
+        ready: (
+          await Promise.all(
+            item.dependencies.map((id) =>
+              deviceRepository().dependencyIsSynced(id),
+            ),
+          )
+        ).every(Boolean),
+      })),
+    )
+  )
+    .filter(({ ready }) => ready)
+    .map(({ item }) => item);
+  if (!eligible.length) return;
+  const dueAt = Math.min(
+    ...eligible.map((item) =>
+      item.nextAttemptAt ? Date.parse(item.nextAttemptAt) : Date.now(),
+    ),
+  );
+  const delay = Math.max(250, Math.min(dueAt - Date.now(), 60_000));
+  retryTimer = window.setTimeout(() => void synchronizeNow(), delay);
+}
+
+export async function synchronizeNow(options: { force?: boolean } = {}) {
   const scope = activeScopeId();
   if (!scope) return { processed: 0, skipped: true };
-  manager ??= new SyncManager(deviceRepository(), httpSyncTransport());
-  const result = await withBrowserLock(scope, () => manager!.run(scope));
+  manager ??= new SyncManager(
+    deviceRepository(),
+    httpSyncTransport(fetch, (status) => connectivity.reportHttp(status)),
+  );
+  const result = await withBrowserLock(scope, () =>
+    manager!.run(scope, options),
+  );
   const repository = deviceRepository();
   const counts = await repository.counts(scope);
   if (connectivity.current().kind === "online" && counts.pending === 0)
@@ -38,6 +76,7 @@ export async function synchronizeNow() {
   notify();
   if (typeof window !== "undefined")
     window.dispatchEvent(new CustomEvent("minhaj:sync-finished"));
+  await scheduleNextRetry(scope);
   return result ?? { processed: 0, skipped: true };
 }
 
@@ -70,6 +109,8 @@ export function startOfflineRuntime(scope: string) {
     window.removeEventListener("minhaj:outbox-changed", onOutbox);
     document.removeEventListener("visibilitychange", onVisible);
     window.clearInterval(periodic);
+    if (retryTimer !== null) window.clearTimeout(retryTimer);
+    retryTimer = null;
     connectivity.stop();
     startedScope = null;
     cleanup = null;
